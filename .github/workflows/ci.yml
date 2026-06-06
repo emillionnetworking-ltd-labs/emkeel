@@ -1,0 +1,31 @@
+name: emkeel-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      # Gate: el PR debe referenciar un ticket (trazabilidad ticket->codigo).
+      # Solo aplica en pull_request (en push directo a main no hay PR title).
+      - name: "Gate — ticket link"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python -m emkeel.gates.check_ticket_link
+
+      # Gate: la suite completa de tests (memoria durable anti-regresión).
+      - name: "Gate — tests"
+        run: pytest -q

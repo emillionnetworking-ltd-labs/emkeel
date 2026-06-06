@@ -1,0 +1,5 @@
+# SEPARACIÓN artefactos/código: governance/ nunca entra al tarball de distribución.
+governance/ export-ignore
+docs/ export-ignore
+tests/ export-ignore
+.github/ export-ignore
