@@ -1,5 +1,5 @@
-# SEPARACIÓN artefactos/código: governance/ nunca entra al tarball de distribución.
-governance/ export-ignore
-docs/ export-ignore
-tests/ export-ignore
-.github/ export-ignore
+# SEPARACIÓN — un solo límite físico:
+# TODO lo que Emkeel genera (ADRs, specs, records) vive en emkeel-governance/.
+# Esa única carpeta se excluye de la distribución (tarball / mirror code-only).
+# Borra esa carpeta para separar artefactos del código; sálvala para respaldarlos.
+emkeel-governance/ export-ignore

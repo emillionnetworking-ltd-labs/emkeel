@@ -10,7 +10,7 @@ que no puedes saltarte. Si algo se puede saltar, no es un gate: es una sugerenci
 2. Produce los artefactos del cambio: plan (si es feature) → código → tests.
 3. **Todo fix de bug empieza por un test que lo reproduce** (queda como regresión permanente).
 4. Abre PR. El merge requiere: **CI verde + aprobación humana + ticket ligado**.
-5. ¿Decisión arquitectónica? Un ADR en `governance/adr/`.
+5. ¿Decisión arquitectónica? Un ADR en `emkeel-governance/adr/`.
 
 ## Reglas duras (las enforza CI, no este archivo)
 
@@ -21,6 +21,7 @@ que no puedes saltarte. Si algo se puede saltar, no es un gate: es una sugerenci
 ## Separación (estructural, no negociable)
 
 - `src/emkeel/` = código distribuible.
-- `governance/` = artefactos (ADR/specs/records). **Nunca** se distribuye (`export-ignore`).
+- `emkeel-governance/` = la ÚNICA carpeta de artefactos (ADR/specs/records). **Nunca** se
+  distribuye (`export-ignore`). Es el único límite físico: borrarla = código limpio.
 
 > Nota: Claude Code lee `CLAUDE.md` (symlink → este archivo).

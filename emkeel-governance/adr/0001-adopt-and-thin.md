@@ -24,8 +24,8 @@ pocos gates duros + gate humano.
 ## Consecuencias
 
 - v1 **congelado** (cantera read-only). W70/W71 **cancelados**.
-- **Separación estructural día 1**: `src/` (distribuible) vs `governance/` (artefactos,
-  `export-ignore`). Nunca más un cutover.
+- **Separación estructural día 1**: `src/` (distribuible) vs `emkeel-governance/` (la única
+  carpeta de artefactos, `export-ignore`). Un solo límite físico. Nunca más un cutover.
 - **Anti-regresión**: test-on-fix + CI corre la suite completa en cada PR.
 
 ## Alternativas consideradas

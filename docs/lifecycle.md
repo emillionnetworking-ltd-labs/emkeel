@@ -6,10 +6,10 @@ rama  →  artefactos  →  PR  →  gates  →  merge
 
 | Paso | Artefacto | Gate (server-side, no falsificable) |
 |---|---|---|
-| plan | `governance/specs/<KEY>.md` (solo features) | CI: existe + valida |
+| plan | `emkeel-governance/specs/<KEY>.md` (solo features) | CI: existe + valida |
 | develop | código + tests | CI: lint + types + **suite completa** verde |
 | verify | (CI) + tu review | required check + required approval |
-| decisión | `governance/adr/NNNN-*.md` | CI: ADR presente si toca zona marcada |
+| decisión | `emkeel-governance/adr/NNNN-*.md` | CI: ADR presente si toca zona marcada |
 | merge | — | branch protection: CI verde + approval + ticket ligado |
 
 ## Por qué funciona

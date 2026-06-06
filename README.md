@@ -13,8 +13,9 @@ ejecutor bajo gates deterministas.
 ## Cómo está organizado (separación estructural, día 1)
 
 - `src/emkeel/` — **código distribuible** (lo único que se empaqueta).
-- `governance/` — **artefactos** (ADR / specs / records). `export-ignore`: **nunca**
-  entra al paquete ni al tarball. Si hay que distribuir, no hay que separar nada.
+- `emkeel-governance/` — **la única carpeta de artefactos** (ADR / specs / records). Un
+  solo límite físico: `export-ignore` la excluye del paquete/tarball. Borra esa carpeta
+  para separar artefactos del código; sálvala para respaldarlos. Nada más que separar.
 
 Ver `AGENTS.md` (contrato del agente) y `docs/lifecycle.md` (la convención).
 
