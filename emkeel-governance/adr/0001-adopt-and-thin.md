@@ -1,39 +1,39 @@
-# 1. Emkeel adopta gobernanza adopt-and-thin
+# 1. Emkeel adopts adopt-and-thin governance
 
-- Estado: aceptado
-- Fecha: 2026-06-06
-- Deciders: operador (EMillion Networking)
+- Status: accepted
+- Date: 2026-06-06
+- Deciders: operator (EMillion Networking)
 
-## Contexto
+## Context
 
-El framework v1 (`em-development-framework`, engine LangGraph bespoke) se volvió
-insostenible para un solo dev: cada escalado se desorganizaba (footgun de `--work-impl=stub`,
-replan W69, scope drift 4×). Un research de mercado (deep-research, 2026-06-06, verificado
-adversarialmente) confirmó el consenso: para un equipo solo/diminuto se **componen
-herramientas off-the-shelf**, no se construye un framework bespoke (el anti-patrón).
+The v1 framework (`em-development-framework`, a bespoke LangGraph engine) became
+unsustainable for a solo dev: every scaling attempt got disorganized (the `--work-impl=stub`
+footgun, the W69 replan, 4× scope drift). A market research pass (deep-research, 2026-06-06,
+adversarially verified) confirmed the consensus: a solo/tiny team **composes off-the-shelf
+tools**, it does not build a bespoke framework (the anti-pattern).
 
-## Decisión
+## Decision
 
-Emkeel compone: **GitHub** (branch protection + Actions CI), **Jira** (workflow),
-**Conventional Commits**, **ADRs markdown**, y **Claude Code** (skills/subagents/hooks +
-AGENTS.md). El único código propio es una capa fina: **gates deterministas** + el patrón
-**Plan-Execute-Verify** + el pegamento **ADR↔sesión** (trazabilidad spec a largo plazo,
-brecha no resuelta del mercado). `"done"` = hecho computado; enforcement server-side;
-pocos gates duros + gate humano.
+Emkeel composes: **GitHub** (branch protection + Actions CI), **Jira** (workflow),
+**Conventional Commits**, **markdown ADRs**, and **Claude Code** (skills/subagents/hooks +
+AGENTS.md). The only custom code is a thin layer: **deterministic gates** + the
+**Plan-Execute-Verify** pattern + the **ADR↔session** glue (long-term spec traceability — an
+unsolved market gap). `"done"` = a computed fact; enforcement server-side; a few hard gates +
+a human gate.
 
-## Consecuencias
+## Consequences
 
-- v1 **congelado** (cantera read-only). W70/W71 **cancelados**.
-- **Separación estructural día 1**: `src/` (distribuible) vs `emkeel-governance/` (la única
-  carpeta de artefactos, `export-ignore`). Un solo límite físico. Nunca más un cutover.
-- **Anti-regresión**: test-on-fix + CI corre la suite completa en cada PR.
+- v1 (`em-development-framework`) **frozen**: a read-only quarry, never patched/extended.
+- **Structural separation day 1**: `src/` (distributable) vs `emkeel-governance/` (the single
+  artifacts folder, `export-ignore`). One physical boundary. Never a cutover again.
+- **Anti-regression**: test-on-fix + CI runs the full suite on every PR.
 
-## Alternativas consideradas
+## Alternatives considered
 
-- Seguir parchando v1 → rechazado (arrastra errores).
-- Reconstruir otro engine bespoke → rechazado (*second-system trap*).
+- Keep patching v1 → rejected (drags errors forward).
+- Rebuild another bespoke engine → rejected (*second-system trap*).
 
-## Referencias
+## References
 
-- Research de mercado (deep-research, 2026-06-06).
-- Memoria del operador: `project-emkeel-v2-pivot`.
+- Market research (deep-research, 2026-06-06).
+- Operator memory: `project-emkeel-v2-pivot`.

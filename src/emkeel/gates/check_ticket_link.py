@@ -1,8 +1,8 @@
-"""Gate: el cambio debe referenciar un ticket (p.ej. KEEL-12).
+"""Gate: the change must reference a ticket (e.g., KEEL-12).
 
-Determinista, corre en CI. Falla (exit 1) si no encuentra una key de ticket en el
-nombre de la rama ni en el título del PR. Es el primer eslabón de trazabilidad
-ticket->codigo. "done" = este check pasa, no un flag auto-atestado.
+Deterministic, runs in CI. Fails (exit 1) if no ticket key is found in the branch name
+or the PR title. It is the first link of ticket->code traceability. "done" = this check
+passes, not a self-attested flag.
 """
 
 from __future__ import annotations
@@ -11,12 +11,12 @@ import os
 import re
 import sys
 
-# Key de ticket estilo Jira: 2+ mayúsculas, guion, número. Ej: KEEL-12, PROD-345.
+# Jira-style ticket key: 2+ uppercase letters, a hyphen, a number. e.g. KEEL-12, PROD-345.
 KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
 
 
 def find_ticket_key(*sources: str) -> str | None:
-    """Devuelve la primera key de ticket encontrada en las fuentes dadas, o None."""
+    """Return the first ticket key found across the given sources, or None."""
     for text in sources:
         match = KEY_RE.search(text or "")
         if match:
@@ -29,11 +29,11 @@ def main() -> int:
     pr_title = os.environ.get("EMKEEL_PR_TITLE", "")
     key = find_ticket_key(branch, pr_title)
     if key:
-        print(f"OK: ticket '{key}' ligado (branch='{branch}' pr_title='{pr_title}').")
+        print(f"OK: ticket '{key}' linked (branch='{branch}' pr_title='{pr_title}').")
         return 0
     print(
-        "FALLO: no se encontró una key de ticket (p.ej. KEEL-12) en la rama ni en el "
-        f"título del PR. branch='{branch}' pr_title='{pr_title}'",
+        "FAIL: no ticket key found (e.g. KEEL-12) in the branch or PR title. "
+        f"branch='{branch}' pr_title='{pr_title}'",
         file=sys.stderr,
     )
     return 1
