@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "emkeel"
-version = "0.1.0"
+version = "0.1.1"
 description = "Adopt-and-thin SDLC governance framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,18 @@ dev = ["pytest>=8"]
 [tool.hatch.build.targets.wheel]
 # SEPARACIÓN: solo el código se empaqueta. emkeel-governance/ NUNCA entra al paquete.
 packages = ["src/emkeel"]
+
+[tool.hatch.build.targets.sdist]
+# Allowlist: the SOURCE distribution ships ONLY the distributable essentials.
+# emkeel-governance/, docs/, tests/, .github/ never leave the (private) repo.
+# (NOTE: .gitattributes export-ignore does NOT affect the sdist — this allowlist does.)
+include = [
+  "src/emkeel",
+  "README.md",
+  "LICENSE",
+  "NOTICE",
+  "pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
