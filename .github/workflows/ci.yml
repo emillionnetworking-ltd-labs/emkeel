@@ -26,6 +26,13 @@ jobs:
           EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
         run: python -m emkeel.gates.check_ticket_link
 
+      # Gate: un PR feature (rama feat/) debe traer su spec en emkeel-governance/specs/.
+      - name: "Gate — plan present (features)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_plan_present
+
       # Gate: la suite completa de tests (memoria durable anti-regresión).
       - name: "Gate — tests"
         run: pytest -q
