@@ -15,6 +15,7 @@ jobs:
   pypi-publish:
     runs-on: ubuntu-latest
     permissions:
+      contents: read   # actions/checkout needs this (job-level perms replace the full set)
       id-token: write  # required for OIDC Trusted Publishing
     steps:
       - uses: actions/checkout@v4
