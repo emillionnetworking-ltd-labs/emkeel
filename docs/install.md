@@ -4,7 +4,10 @@
 auto-transition workflow, the `emkeel-governance/` folder, connection config, and an
 `AGENTS.md`. It is **non-clobbering** and **never writes secrets**.
 
-## 1. Install
+## 1. Prerequisites & install
+
+You need: Python 3.11+ (with `pip`), `git`, a GitHub account, and a Jira account + project.
+Then open your repo in your editor and:
 
 ```bash
 pip install emkeel
