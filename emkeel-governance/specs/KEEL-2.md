@@ -1,19 +1,20 @@
-# KEEL-2 — Gate: plan-presence para features
+# KEEL-2 — Gate: plan-presence for features
 
-## Contexto
-Primer ticket dogfood: el primer cambio real que recorre el loop de Emkeel
-(rama → PR → gates CI → merge). Añade el segundo gate determinista.
+## Context
+First dogfood ticket: the first real change to run through Emkeel's loop
+(branch → PR → CI gates → merge). Adds the second deterministic gate.
 
 ## Plan
-- `src/emkeel/gates/check_plan_present.py` — el gate: una rama `feat/` exige
-  `emkeel-governance/specs/<KEY>.md`; otros tipos no.
-- `tests/test_check_plan_present.py` — su test (test-on-fix desde el día 1).
-- `.github/workflows/ci.yml` — nuevo step que corre el gate en PRs.
+- `src/emkeel/gates/check_plan_present.py` — the gate: a `feat/` branch requires
+  `emkeel-governance/specs/<KEY>.md`; other types don't.
+- `tests/test_check_plan_present.py` — its test (test-on-fix from day 1).
+- `.github/workflows/ci.yml` — a new step that runs the gate on PRs.
 
-## Verificación
-- `pytest` verde (incluye el nuevo test).
-- Auto-validación: este PR es `feat/KEEL-2-...`, así que el gate corre sobre sí mismo
-  y exige este mismo spec → debe pasar porque el archivo existe.
+## Acceptance Criteria
+- A feature PR (`feat/` branch) without its spec fails CI.
+- A feature PR with its spec passes.
+- Non-feature branches (chore/fix/docs) are not required to have one.
+- This very PR (`feat/KEEL-2`) carries its spec, so the gate validates itself.
 
-## Anti-regresión
-- El test cubre: feature requiere spec, no-feature no, y detección de spec presente.
+## Anti-regression
+- Tests cover: feature requires spec, non-feature doesn't, and detecting a present spec.

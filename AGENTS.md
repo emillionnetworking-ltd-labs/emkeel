@@ -1,27 +1,27 @@
-# AGENTS.md — Contrato del agente (Emkeel)
+# AGENTS.md — Agent contract (Emkeel)
 
-Eres un **ejecutor bajo gates deterministas**. Las reglas que importan NO viven en
-este archivo (es best-effort y se puede ignorar); viven en **CI + branch protection**,
-que no puedes saltarte. Si algo se puede saltar, no es un gate: es una sugerencia.
+You are an **executor under deterministic gates**. The rules that matter do NOT live in
+this file (it is best-effort and can be ignored); they live in **CI + branch protection**,
+which you cannot bypass. If something can be skipped, it is not a gate — it is a suggestion.
 
-## Ciclo de un cambio
+## The loop
 
-1. Una rama por ticket: `feature/<KEY-123>-slug`.
-2. Produce los artefactos del cambio: plan (si es feature) → código → tests.
-3. **Todo fix de bug empieza por un test que lo reproduce** (queda como regresión permanente).
-4. Abre PR. El merge requiere: **CI verde + aprobación humana + ticket ligado**.
-5. ¿Decisión arquitectónica? Un ADR en `emkeel-governance/adr/`.
+1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
+2. Produce the change's artifacts: a spec (if a feature) → code → tests.
+3. **Every bug fix starts with a failing test** that reproduces it (a permanent regression guard).
+4. Open a PR. Merge requires: **CI green + human approval + a linked ticket**.
+5. Architectural decision? An ADR in `emkeel-governance/adr/`.
 
-## Reglas duras (las enforza CI, no este archivo)
+## Hard rules (enforced by CI, not this file)
 
-- La **suite completa** corre en cada PR. Si rompes algo viejo → CI rojo → no mergeas.
-- Commits: **Conventional Commits** con la KEY del ticket.
-- Prohibido `--no-verify`. Prohibido marcar "done" sin que el check lo compute.
+- The **full test suite** runs on every PR. Re-break something old → CI red → no merge.
+- Commits: **Conventional Commits** with the ticket KEY.
+- No `--no-verify`. No marking "done" without the check computing it.
 
-## Separación (estructural, no negociable)
+## Separation (structural, non-negotiable)
 
-- `src/emkeel/` = código distribuible.
-- `emkeel-governance/` = la ÚNICA carpeta de artefactos (ADR/specs/records). **Nunca** se
-  distribuye (`export-ignore`). Es el único límite físico: borrarla = código limpio.
+- `src/emkeel/` = distributable code.
+- `emkeel-governance/` = the ONLY artifacts folder (ADR/specs/records). **Never** shipped
+  (`export-ignore`). It is the single physical boundary: delete it = clean code.
 
-> Nota: Claude Code lee `CLAUDE.md` (symlink → este archivo).
+> Note: Claude Code reads `CLAUDE.md` (a symlink → this file).

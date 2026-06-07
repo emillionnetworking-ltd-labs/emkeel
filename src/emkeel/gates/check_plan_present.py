@@ -1,8 +1,8 @@
-"""Gate: un cambio de tipo *feature* debe traer su spec/plan.
+"""Gate: a *feature* change must carry its spec/plan.
 
-Determinista, corre en CI. Si la rama es `feat/` (o `feature/`), exige que exista
-`emkeel-governance/specs/<KEY>.md`. Otros tipos (chore/fix/docs) no lo requieren.
-"done" = el spec existe, no un flag. Segundo eslabón de la trazabilidad ticket->spec.
+Deterministic, runs in CI. If the branch is `feat/` (or `feature/`), it requires
+`emkeel-governance/specs/<KEY>.md` to exist. Other types (chore/fix/docs) don't.
+"done" = the spec exists, not a flag. Second link of ticket->spec traceability.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ FEATURE_PREFIXES = ("feat/", "feature/")
 
 
 def spec_required(branch: str) -> bool:
-    """True si la rama denota una feature (y por tanto requiere spec)."""
+    """True if the branch denotes a feature (and therefore requires a spec)."""
     b = branch.strip().lower()
     return any(b.startswith(p) for p in FEATURE_PREFIXES)
 
@@ -31,21 +31,21 @@ def main() -> int:
     specs_dir = Path(os.environ.get("EMKEEL_SPECS_DIR", "emkeel-governance/specs"))
 
     if not spec_required(branch):
-        print(f"OK: rama '{branch}' no es feature; no requiere spec.")
+        print(f"OK: branch '{branch}' is not a feature; no spec required.")
         return 0
 
     key = find_ticket_key(branch)
     if not key:
-        print(f"FALLO: rama feature '{branch}' sin key de ticket.", file=sys.stderr)
+        print(f"FAIL: feature branch '{branch}' has no ticket key.", file=sys.stderr)
         return 1
 
     path = spec_path_for(key, specs_dir)
     if path.is_file():
-        print(f"OK: spec presente para {key}: {path}")
+        print(f"OK: spec present for {key}: {path}")
         return 0
 
     print(
-        f"FALLO: la feature {key} no tiene spec. Crea '{path}' antes de mergear.",
+        f"FAIL: feature {key} has no spec. Create '{path}' before merging.",
         file=sys.stderr,
     )
     return 1

@@ -1,22 +1,22 @@
 # Lifecycle (lean)
 
 ```
-rama  →  artefactos  →  PR  →  gates  →  merge
+branch  →  artifacts  →  PR  →  gates  →  merge
 ```
 
-| Paso | Artefacto | Gate (server-side, no falsificable) |
+| Step | Artifact | Gate (server-side, non-falsifiable) |
 |---|---|---|
-| plan | `emkeel-governance/specs/<KEY>.md` (solo features) | CI: existe + valida |
-| develop | código + tests | CI: lint + types + **suite completa** verde |
-| verify | (CI) + tu review | required check + required approval |
-| decisión | `emkeel-governance/adr/NNNN-*.md` | CI: ADR presente si toca zona marcada |
-| merge | — | branch protection: CI verde + approval + ticket ligado |
+| plan | `emkeel-governance/specs/<KEY>.md` (features only) | CI: exists + valid |
+| develop | code + tests | CI: lint + types + **full suite** green |
+| verify | (CI) + your review | required check + required approval |
+| decision | `emkeel-governance/adr/NNNN-*.md` | CI: ADR present if a flagged area is touched |
+| merge | — | branch protection: CI green + approval + linked ticket |
 
-## Por qué funciona
+## Why it works
 
-- **"done" = el check pasa**, no un flag que el agente escribe. (Con LangGraph y sin
-  LangGraph el agente se saltaba reglas porque eran auto-atestadas; el orquestador
-  nunca fue la variable — el locus de autoridad sí.)
-- La **suite de tests es la memoria durable** anti-regresión: el agente olvida entre
-  sesiones, la suite no. Re-romper algo viejo = CI rojo = bloqueado.
-- Lo no-mecanizable lo cubre **tu gate humano** (aprobar el PR), no más prosa.
+- **"done" = the check passes**, not a flag the agent writes. (With and without an engine the
+  agent skipped self-attested rules; the orchestrator was never the variable — the locus of
+  authority was.)
+- The **test suite is the durable memory** against regressions: the agent forgets between
+  sessions, the suite does not. Re-breaking something old = CI red = blocked.
+- What can't be mechanized is covered by **your human gate** (approving the PR), not more prose.
