@@ -7,9 +7,8 @@ missing line appended. Secrets are NEVER written — only `.env.example` (a temp
 CLI:  python -m emkeel.init [TARGET] --jira-url URL --jira-project KEY --github-repo OWNER/REPO
       [--emkeel-source SRC] [--dry-run] [--force]
 
---emkeel-source is what the generated CI runs as `pip install <SRC>`. Default: the public
-repo pinned to the release tag (token-less). Pass `emkeel~=X.Y.0` once emkeel is on PyPI,
-or a git+token form for a PRIVATE fork, e.g.:
+--emkeel-source is what the generated CI runs as `pip install <SRC>`. Default: the PyPI
+package, version-pinned (`emkeel~=X.Y.0`). For a PRIVATE fork, pass a git+token form, e.g.:
   'git+https://x-access-token:${EMKEEL_INSTALL_TOKEN}@github.com/OWNER/emkeel.git'
 (then add EMKEEL_INSTALL_TOKEN as a repo Actions secret).
 """
@@ -22,20 +21,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-# Canonical public distribution source. Until emkeel is on PyPI, governed repos install
-# from the public repo pinned to the release tag (token-less).
-_PUBLIC_REPO = "https://github.com/emillionnetworking-ltd-labs/emkeel.git"
-
-
 def _default_source() -> str:
-    """Default install spec: the PUBLIC repo pinned to the current version's tag.
-
-    Token-less (public) and version-pinned (``@vX.Y.Z``), so a new release never breaks an
-    existing governed repo until it opts in. Switch to ``emkeel~=X.Y.0`` once on PyPI.
-    """
+    """Default install spec: the PyPI package, version-pinned, so a new release never
+    breaks an existing governed repo until it opts in. 0.x pins the minor; >=1.0 the major.
+    (For a private fork, pass a git+token form via --emkeel-source.)"""
     from emkeel import __version__
 
-    return f"git+{_PUBLIC_REPO}@v{__version__}"
+    major, minor = (int(x) for x in __version__.split(".")[:2])
+    return f"emkeel~=0.{minor}.0" if major == 0 else f"emkeel~={major}.0"
 
 
 @dataclass
