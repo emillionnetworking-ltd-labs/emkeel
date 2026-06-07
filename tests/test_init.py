@@ -15,6 +15,7 @@ def test_plan_on_empty_target_creates_everything(tmp_path):
     k = _kinds(plan(tmp_path, CFG, force=False))
     assert k["emkeel.toml"] == "create"
     assert k[".github/workflows/emkeel-ci.yml"] == "create"
+    assert k[".github/workflows/jira-transition.yml"] == "create"
     assert k[".gitattributes"] == "append"
     assert k[".gitignore"] == "append"
 
