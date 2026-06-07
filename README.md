@@ -35,9 +35,9 @@ branch protection).
 ## Two ways to set up
 
 - **Manual** — run `emkeel init` and follow the printed checklist. Full guide: `docs/install.md`.
-- **AI-assisted** — tell your coding agent *"set up Emkeel in this repo"*. It walks you
-  through it **conversationally, in your language**, surfacing the links in real time.
-  Guide: `docs/onboarding.md`.
+- **AI-assisted** — run `emkeel onboard` and paste its output to your coding agent
+  (Claude Code, Cursor, …). It asks you for your repo/Jira details and sets Emkeel up
+  **conversationally, in your language**, surfacing the links in real time.
 
 ## What you get
 
