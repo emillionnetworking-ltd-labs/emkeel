@@ -33,6 +33,13 @@ jobs:
           EMKEEL_BRANCH: ${{ github.head_ref }}
         run: python -m emkeel.gates.check_plan_present
 
+      # Gate: un spec de feature debe declarar Acceptance Criteria.
+      - name: "Gate — acceptance criteria (features)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_acceptance_criteria
+
       # Gate: la suite completa de tests (memoria durable anti-regresión).
       - name: "Gate — tests"
         run: pytest -q
