@@ -70,4 +70,6 @@ features; full test suite). Merge → the linked ticket moves to Done.
   apply. Removes the wiring (workflows, `emkeel.toml`, `AGENTS.md`, `CLAUDE.md`, `.env.example`)
   but **keeps** `emkeel-governance/` unless you pass `--purge`. It never strips lines you already
   had in `.gitignore`/`.gitattributes`. (`emkeel onboard` installs nothing — it only prints the guide.)
+- **Re-govern a repo** (undo an eject): run `emkeel init` again — it re-creates the wiring, and
+  your `emkeel-governance/` history is preserved (unless you had used `--purge`).
 - **Remove the tool:** `pipx uninstall emkeel`.

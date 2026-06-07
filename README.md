@@ -81,6 +81,7 @@ There are **three separate things**, so "remove" means different things — pick
 | **Upgrade the tool** | `pipx upgrade emkeel` | the `emkeel` program on your machine |
 | **Check the version** | `emkeel version` | (also flags a newer one on PyPI) |
 | **Un-govern a repo** (remove Emkeel's files) | `emkeel eject` *(alias: `emkeel uninstall`)* | the repo's wiring: workflows, `emkeel.toml`, `.env.example`, `AGENTS.md`, `CLAUDE.md`. **Keeps** `emkeel-governance/` (your history) — add `--purge` to delete that too. |
+| **Re-govern a repo** (undo an eject) | `emkeel init` *(or `emkeel onboard`)* | re-creates the wiring; your `emkeel-governance/` history is kept (unless you had used `--purge`) |
 | **Uninstall the tool** | `pipx uninstall emkeel` | removes the `emkeel` program from your machine |
 
 > **`emkeel eject` does NOT remove the tool** — it reverses `emkeel init` inside one repo. It's a
