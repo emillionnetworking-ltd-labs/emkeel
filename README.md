@@ -6,39 +6,47 @@ human-approved merge → the ticket closes itself. `"done"` is a **computed fact
 self-attested flag — enforcement lives server-side (CI + branch protection), out of the
 agent's reach.
 
-## Getting started (AI-assisted — recommended)
+## Getting started
 
 **You'll need:** Python 3.11+, [`pipx`](https://pipx.pypa.io) (`sudo apt install pipx` on
-Debian/Ubuntu), `git`, a GitHub account, a Jira account + a project, and an IDE with an AI
-coding agent — e.g. **VS Code with Claude Code**, or Cursor.
+Debian/Ubuntu), `git`, a GitHub account, and a Jira account + a project.
 
-1. **Open your project in your AI IDE** — an existing repo, or a new empty folder.
-2. **Tell your AI agent, verbatim:**
+1. **Install Emkeel** — use pipx (one method; see the note below):
 
-   > Install and set up Emkeel in this repo: install it with `pipx install emkeel`, then run
-   > `emkeel onboard`, and follow what it prints. Ask me for my GitHub repo, Jira URL, and
-   > Jira project key.
+   ```bash
+   pipx install emkeel        # already have it? → pipx upgrade emkeel
+   ```
 
-3. The agent installs Emkeel, runs the guided onboarding, and walks you through the rest
-   **in your language**, handing you the exact links for the steps only you can do
-   (create secrets, turn on branch protection).
+2. **Open your project** in your editor — an existing repo, or a new empty folder.
+
+3. **Run the guided setup:**
+
+   ```bash
+   emkeel onboard
+   ```
+
+   Paste its output to your AI coding agent (VS Code + Claude Code, Cursor, …) and it sets the
+   repo up **in your language**, handing you the exact links for the steps only you can do
+   (create secrets, turn on branch protection). Or follow the printed steps yourself.
 
 ## Managing Emkeel
 
 | Action | Command |
 | --- | --- |
 | **Install** | `pipx install emkeel` |
+| **Upgrade** (already installed) | `pipx upgrade emkeel` |
 | **Check version / updates** | `emkeel version` |
-| **Upgrade** | `pipx upgrade emkeel` |
 | **Set up a repo** | `emkeel onboard` (AI-guided) · or `emkeel init` (manual, below) |
 | **Remove from a repo** | `emkeel uninstall` (preview; add `--yes` to apply — keeps `emkeel-governance/`) |
 | **Remove the tool** | `pipx uninstall emkeel` |
 
-> **No `pipx`?** Use a venv: `python3 -m venv .venv && . .venv/bin/activate && pip install emkeel`.
-> (Plain `pip install emkeel` fails on modern systems — externally-managed, PEP 668.)
+> **Use one install method.** With pipx, `pipx install emkeel` detects an existing install and
+> tells you to `pipx upgrade emkeel` — so a re-run never makes a mess. **Don't mix** pipx with
+> `pip --user`/venv; that creates shadowing, conflicting installs. No pipx available? A venv is
+> idempotent too: `python3 -m venv .venv && . .venv/bin/activate && pip install -U emkeel`.
 >
-> **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0`, so it auto-takes patches and
-> minors; a breaking major (e.g. `0.2.0`) is opt-in — you bump the pin yourself.
+> **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0` — it auto-takes patches and
+> minors; a breaking major (e.g. `0.2.0`) is opt-in (you bump the pin).
 
 ## Manual setup (no AI)
 

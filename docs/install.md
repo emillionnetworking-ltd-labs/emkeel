@@ -16,11 +16,14 @@ pipx install emkeel
 # no pipx yet? Debian/Ubuntu: sudo apt install pipx && pipx ensurepath
 ```
 
-No pipx available? Use a venv instead:
+No pipx available? Use a venv instead (`-U` makes a re-run idempotent — install or upgrade):
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate && pip install emkeel
+python3 -m venv .venv && . .venv/bin/activate && pip install -U emkeel
 ```
+
+> Use **one** method. `pipx install emkeel` detects an existing pipx install and tells you to
+> `pipx upgrade emkeel`. Don't mix pipx with `pip --user`/venv — that shadows installs.
 
 ## 2. Scaffold — pick your scenario
 
@@ -57,9 +60,8 @@ emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --ji
 Open a small PR: the `gates` check runs (ticket link; spec + acceptance criteria for
 features; full test suite). Merge → the linked ticket moves to Done.
 
-> Prefer AI-assisted? Tell your agent, verbatim: *Install and set up Emkeel in this repo:
-> install it with `pipx install emkeel` (or `pip` inside a venv), then run `emkeel onboard`,
-> and follow what it prints. Ask me for my GitHub repo, Jira URL, and Jira project key.*
+> Prefer AI-assisted setup? After installing, run `emkeel onboard` and paste its output to
+> your AI coding agent — it drives the scaffold + connect steps in your language.
 
 ## 5. Updating & uninstalling
 
