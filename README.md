@@ -20,4 +20,4 @@ ejecutor bajo gates deterministas.
 Ver `AGENTS.md` (contrato del agente) y `docs/lifecycle.md` (la convención).
 
 ---
-© 2026 EMillion Networking LTD — ver `LICENSE`.
+Licensed under **Apache-2.0** — © 2026 EMillion Networking LTD (ver `LICENSE` / `NOTICE`).
