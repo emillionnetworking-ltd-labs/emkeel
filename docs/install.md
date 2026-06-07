@@ -17,6 +17,20 @@ python -m emkeel.init /path/to/repo \
 python -m emkeel.init /path/to/repo --jira-url ... --jira-project KEY --github-repo owner/repo
 ```
 
+### Install source (private emkeel)
+
+The generated CI runs `pip install <source>`. Default is `emkeel` (the PyPI name, for
+when published). For a **private** emkeel, pass a git+token form and add the token as a
+repo secret:
+
+```bash
+python -m emkeel.init /path/to/repo ... \
+  --emkeel-source 'git+https://x-access-token:${EMKEEL_INSTALL_TOKEN}@github.com/OWNER/emkeel.git'
+```
+
+Then add `EMKEEL_INSTALL_TOKEN` (a fine-grained PAT with READ access to the emkeel repo)
+as a GitHub Actions secret in the target repo.
+
 ## What it creates
 
 - `emkeel-governance/{specs,adr,records}/` — the single artifact folder (`export-ignore`).

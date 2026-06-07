@@ -5,7 +5,12 @@ untouched (use --force to overwrite), EXCEPT .gitattributes/.gitignore which get
 missing line appended. Secrets are NEVER written — only `.env.example` (a template).
 
 CLI:  python -m emkeel.init [TARGET] --jira-url URL --jira-project KEY --github-repo OWNER/REPO
-      add --dry-run to write nothing, --force to overwrite existing files.
+      [--emkeel-source SRC] [--dry-run] [--force]
+
+--emkeel-source is what the generated CI runs as `pip install <SRC>`. Default "emkeel"
+(works once published). For a PRIVATE emkeel, pass a git+token form, e.g.:
+  'git+https://x-access-token:${EMKEEL_INSTALL_TOKEN}@github.com/OWNER/emkeel.git'
+and add EMKEEL_INSTALL_TOKEN as a repo Actions secret.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ class Config:
     jira_url: str = ""
     jira_project: str = ""
     github_repo: str = ""
+    emkeel_source: str = "emkeel"
 
 
 @dataclass
@@ -29,14 +35,13 @@ class Action:
     kind: str  # "create" | "skip-exists" | "append" | "append-skip"
 
 
-# Files created only if absent (non-clobber). Order is informative for output.
 def _files(cfg: Config) -> dict[str, str]:
     return {
         "emkeel-governance/specs/.gitkeep": "",
         "emkeel-governance/adr/.gitkeep": "",
         "emkeel-governance/records/.gitkeep": "",
-        ".github/workflows/emkeel-ci.yml": _ci_yaml(),
-        ".github/workflows/jira-transition.yml": _jira_yaml(),
+        ".github/workflows/emkeel-ci.yml": _ci_yaml(cfg.emkeel_source),
+        ".github/workflows/jira-transition.yml": _jira_yaml(cfg.emkeel_source),
         "emkeel.toml": _toml(cfg),
         ".env.example": _env_example(),
         "AGENTS.md": _agents_md(),
@@ -89,7 +94,9 @@ def _toml(cfg: Config) -> str:
         f'base_url = "{cfg.jira_url}"\n'
         f'project_key = "{cfg.jira_project}"\n\n'
         "[github]\n"
-        f'repo = "{cfg.github_repo}"\n'
+        f'repo = "{cfg.github_repo}"\n\n'
+        "[emkeel]\n"
+        f'source = "{cfg.emkeel_source}"\n'
     )
 
 
@@ -102,8 +109,8 @@ def _env_example() -> str:
     )
 
 
-def _ci_yaml() -> str:
-    return """name: emkeel-ci
+def _ci_yaml(source: str) -> str:
+    return f"""name: emkeel-ci
 
 on:
   pull_request:
@@ -118,31 +125,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # TODO: until emkeel is on PyPI, replace with your install source, e.g.
-      #   pip install git+https://github.com/<owner>/emkeel.git
       - name: Install emkeel
-        run: pip install emkeel
+        run: pip install "{source}"
       - name: "Gate - ticket link"
         if: github.event_name == 'pull_request'
         env:
-          EMKEEL_BRANCH: ${{ github.head_ref }}
-          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+          EMKEEL_PR_TITLE: ${{{{ github.event.pull_request.title }}}}
         run: python -m emkeel.gates.check_ticket_link
       - name: "Gate - plan present (features)"
         if: github.event_name == 'pull_request'
         env:
-          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
         run: python -m emkeel.gates.check_plan_present
       - name: "Gate - acceptance criteria (features)"
         if: github.event_name == 'pull_request'
         env:
-          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
         run: python -m emkeel.gates.check_acceptance_criteria
 """
 
 
-def _jira_yaml() -> str:
-    return """name: jira-transition
+def _jira_yaml(source: str) -> str:
+    return f"""name: jira-transition
 
 # Post-merge automation (NOT a gate): when a PR merges, move its linked ticket to Done.
 on:
@@ -157,17 +162,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # TODO: until emkeel is on PyPI, replace with your install source.
       - name: Install emkeel
-        run: pip install emkeel
+        run: pip install "{source}"
       - name: Transition linked ticket to Done
         continue-on-error: true
         env:
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-          EMKEEL_BRANCH: ${{ github.head_ref }}
-          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+          JIRA_BASE_URL: ${{{{ secrets.JIRA_BASE_URL }}}}
+          JIRA_EMAIL: ${{{{ secrets.JIRA_EMAIL }}}}
+          JIRA_TOKEN: ${{{{ secrets.JIRA_TOKEN }}}}
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+          EMKEEL_PR_TITLE: ${{{{ github.event.pull_request.title }}}}
         run: python -m emkeel.jira
 """
 
@@ -190,14 +194,24 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
 
 def connection_checklist(cfg: Config) -> str:
     repo = cfg.github_repo or "<owner>/<repo>"
-    return (
-        "NEXT — connect Emkeel (one-time):\n"
-        "  1. GitHub for Jira app → install & link the repo so commits/PRs link to tickets.\n"
-        f"  2. Branch protection on main of {repo}: require the 'gates' check + a PR.\n"
-        "  3. Add JIRA_TOKEN (and JIRA_EMAIL) as GitHub Actions secrets (Settings → Secrets).\n"
-        "  4. Local: cp .env.example .env and fill it (it is gitignored).\n"
-        "  5. Set the CI 'Install emkeel' line to your install source until emkeel is on PyPI.\n"
-    )
+    lines = [
+        "NEXT — connect Emkeel (one-time):",
+        "  1. GitHub for Jira app → install & link the repo so commits/PRs link to tickets.",
+        f"  2. Branch protection on main of {repo}: require the 'gates' check + a PR.",
+        "  3. Add JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN as GitHub Actions secrets.",
+        "  4. Local: cp .env.example .env and fill it (it is gitignored).",
+    ]
+    if "EMKEEL_INSTALL_TOKEN" in cfg.emkeel_source:
+        lines.append(
+            "  5. Add EMKEEL_INSTALL_TOKEN secret (a fine-grained PAT with READ access to the "
+            "emkeel repo) — the CI uses it to install the private package."
+        )
+    else:
+        lines.append(
+            "  5. Ensure the CI 'Install emkeel' source is reachable "
+            f"(currently: pip install {cfg.emkeel_source})."
+        )
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -207,11 +221,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--jira-url", default="")
     ap.add_argument("--jira-project", default="")
     ap.add_argument("--github-repo", default="")
+    ap.add_argument("--emkeel-source", default="emkeel", help="pip install source for emkeel in CI")
     ap.add_argument("--dry-run", action="store_true", help="write nothing; just print the plan")
     ap.add_argument("--force", action="store_true", help="overwrite existing files")
     ns = ap.parse_args(argv)
 
-    cfg = Config(ns.jira_url, ns.jira_project, ns.github_repo)
+    cfg = Config(ns.jira_url, ns.jira_project, ns.github_repo, ns.emkeel_source)
     target = Path(ns.target)
     actions = apply(target, cfg, ns.force, ns.dry_run)
 

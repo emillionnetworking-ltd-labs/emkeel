@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from emkeel.init import APPEND_LINES, Config, apply, main, plan
+from emkeel.init import APPEND_LINES, Config, apply, connection_checklist, main, plan
 
 CFG = Config(jira_url="https://x.atlassian.net", jira_project="DEMO", github_repo="o/r")
 
@@ -62,6 +62,30 @@ def test_toml_carries_config(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     toml = (tmp_path / "emkeel.toml").read_text()
     assert 'project_key = "DEMO"' in toml and 'repo = "o/r"' in toml
+
+
+def test_emkeel_source_flows_into_ci_and_toml(tmp_path):
+    src = "git+https://x-access-token:${EMKEEL_INSTALL_TOKEN}@github.com/o/emkeel.git"
+    cfg = Config(github_repo="o/r", emkeel_source=src)
+    apply(tmp_path, cfg, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    jira = (tmp_path / ".github/workflows/jira-transition.yml").read_text()
+    toml = (tmp_path / "emkeel.toml").read_text()
+    assert f'pip install "{src}"' in ci
+    assert f'pip install "{src}"' in jira
+    assert f'source = "{src}"' in toml
+
+
+def test_default_source_is_pypi_name(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert 'pip install "emkeel"' in (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+
+
+def test_checklist_mentions_token_only_for_private_source():
+    private = connection_checklist(Config(emkeel_source="git+https://x-access-token:${EMKEEL_INSTALL_TOKEN}@x/emkeel.git"))
+    public = connection_checklist(Config(emkeel_source="emkeel"))
+    assert "EMKEEL_INSTALL_TOKEN" in private
+    assert "EMKEEL_INSTALL_TOKEN" not in public
 
 
 def test_main_smoke(tmp_path, capsys):
