@@ -17,8 +17,17 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _default_source() -> str:
+    """A version-PINNED default install spec so a new emkeel release never breaks an
+    existing governed repo until it opts in. 0.x pins the minor; >=1.0 pins the major."""
+    from emkeel import __version__
+
+    major, minor = (int(x) for x in __version__.split(".")[:2])
+    return f"emkeel~=0.{minor}.0" if major == 0 else f"emkeel~={major}.0"
 
 
 @dataclass
@@ -26,7 +35,7 @@ class Config:
     jira_url: str = ""
     jira_project: str = ""
     github_repo: str = ""
-    emkeel_source: str = "emkeel"
+    emkeel_source: str = field(default_factory=_default_source)
 
 
 @dataclass
@@ -221,7 +230,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--jira-url", default="")
     ap.add_argument("--jira-project", default="")
     ap.add_argument("--github-repo", default="")
-    ap.add_argument("--emkeel-source", default="emkeel", help="pip install source for emkeel in CI")
+    ap.add_argument("--emkeel-source", default=_default_source(),
+                    help="pip install source for emkeel in CI (default: version-pinned)")
     ap.add_argument("--dry-run", action="store_true", help="write nothing; just print the plan")
     ap.add_argument("--force", action="store_true", help="overwrite existing files")
     ns = ap.parse_args(argv)
