@@ -11,23 +11,18 @@ agent's reach.
 **You'll need:** Python 3.11+ (with `pip`), `git`, a GitHub account, a Jira account + a
 project, and an IDE with an AI coding agent — e.g. **VS Code with Claude Code**, or Cursor.
 
-1. **Open your project in your AI IDE.** Open the folder you want to govern — either:
-   - an **existing repo** you already have (Emkeel adds governance to it), or
-   - a **new empty folder** (Emkeel helps you start a governed project from scratch).
-2. **Install Emkeel:**
-   ```bash
-   pip install emkeel
-   ```
-3. **Start the guided setup, then paste it to your agent:**
-   ```bash
-   emkeel onboard
-   ```
-   Copy the printed output into your AI agent's chat. It asks you a couple of questions
-   (existing repo or new? your GitHub repo, Jira URL, project key) and then sets everything
-   up **in your language**, handing you the **exact links** for the steps only you can do
+1. **Open your project in your AI IDE** — either an **existing repo** you already have, or a
+   **new empty folder** for a project from scratch.
+2. **Tell your AI agent, verbatim:**
+
+   > Install and set up Emkeel in this repo: run `pip install emkeel`, then `emkeel onboard`,
+   > and follow what it prints. Ask me for my GitHub repo, Jira URL, and Jira project key.
+
+3. The agent installs Emkeel, runs the guided onboarding, and walks you through the rest
+   **in your language**, handing you the **exact links** for the steps only you can do
    (create secrets, turn on branch protection).
 
-That's it — the agent drives the rest, one step at a time.
+> Prefer to run it yourself? `pip install emkeel`, then `emkeel onboard`, and follow it.
 
 ## Manual setup (no AI)
 
