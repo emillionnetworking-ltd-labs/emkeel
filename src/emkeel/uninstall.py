@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     dry = not ns.yes
 
     actions = apply_uninstall(target, ns.purge, dry_run=dry)
-    print(f"emkeel uninstall [{'dry-run' if dry else 'removed'}] -> {target}")
+    print(f"emkeel eject [{'dry-run' if dry else 'removed'}] -> {target}")
     for a in actions:
         print(f"  {a.kind:11} {a.path}")
     if dry:
