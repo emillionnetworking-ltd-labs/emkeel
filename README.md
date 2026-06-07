@@ -9,7 +9,7 @@ agent's reach.
 ## Install (quick reference)
 
 Emkeel is a **zero-dependency** Python CLI (needs **Python 3.11+**). New to the command line?
-Use the **step-by-step guide below** instead of this table.
+Jump to the **step-by-step guide** below.
 
 | Platform | Install |
 | --- | --- |
@@ -19,86 +19,55 @@ Use the **step-by-step guide below** instead of this table.
 | **Linux/server without sudo** | `pip install --user --break-system-packages emkeel` *(safe — zero deps)* |
 
 **Upgrade:** `pipx upgrade emkeel` · **Check version:** `emkeel version`
+*(Switching from `pip` to pipx? Run `pip uninstall emkeel` first to avoid two copies.)*
 
-## Step-by-step for beginners (Linux)
+## Getting started — step by step (Linux)
 
-Never used a terminal? Do exactly this, in order.
+Two ways to set up: **AI-assisted (recommended)** or **manual**. Both start by installing Emkeel once.
 
-**1. Open a terminal.** Press **Ctrl + Alt + T** (or open your apps and search **"Terminal"**).
-A window with a text prompt appears — you type a command, then press **Enter**.
+### First: install Emkeel (one time)
 
-**2. Check your Python version.** Type and press Enter:
+1. **Open a terminal** — press **Ctrl + Alt + T** (or search "Terminal" in your apps).
+2. **Check Python:** type `python3 --version`. You need **3.11+**.
+3. **Install** (copy-paste the whole line):
+   ```bash
+   sudo apt install -y pipx && pipx ensurepath && pipx install emkeel
+   ```
+   `sudo` asks for **your login password** (the one you use to sign in). **Nothing shows on
+   screen while you type it — that's normal.** Then **close the terminal and open a new one**.
+   > **No sudo / "not in the sudoers file"?** You're not an admin. Use this (no admin, safe —
+   > Emkeel has no dependencies): `pip install --user --break-system-packages emkeel`
+4. **Confirm:** type `emkeel version` → should say `emkeel 0.1.x`.
 
-```bash
-python3 --version
-```
+### ⭐ Option A — AI-assisted (recommended)
 
-You need **3.11 or higher**. If it's lower or says "command not found", install it with
-`sudo apt install python3` (see the password note in step 3).
+1. **Open your project in your AI editor.** Open **VS Code** (or Cursor) and open your project
+   folder (*File → Open Folder*). New project? Make an empty folder and open that.
+2. **Open the AI chat panel** — in VS Code with Claude Code, click the Claude icon in the
+   sidebar. (Cursor: open the chat with Ctrl/Cmd+L.)
+3. **Type this in the chat:**
+   > Set up Emkeel in this repo: run `emkeel onboard` and follow it.
+4. The assistant will **ask you three things** — answer with your details:
+   - your **GitHub repo** — like `acme/web`
+   - your **Jira address** — like `https://acme.atlassian.net`
+   - your **Jira project key** — like `SCRUM`
+5. The assistant scaffolds everything (on a branch + PR) and gives you a few **links** to finish.
+   🔒 **Security — important:** create your Jira token and paste it **into GitHub's secret page**
+   (the link the assistant gives you) or into a local `.env` file — **NEVER paste a token or
+   password into the chat.** The assistant never needs to see your secrets.
+6. Merge the small PR the assistant opens. **Done — your repo is governed by Emkeel.**
 
-**3. Install Emkeel.** Copy-paste this whole line and press Enter:
+### Option B — Manual (no AI)
 
-```bash
-sudo apt install -y pipx && pipx ensurepath && pipx install emkeel
-```
-
-- `sudo` means "do this as administrator" — it asks for **your login password** (the one you
-  use to sign into the computer). **While you type it, nothing appears on screen — that's
-  normal.** Type it and press Enter.
-- When it finishes, **close the terminal and open a new one** so the `emkeel` command is found.
-
-> **Don't have sudo / it says "not in the sudoers file"?** Then you're not an administrator on
-> this machine. Use this instead — it needs **no admin** and is safe (Emkeel has no
-> dependencies, so nothing can conflict):
->
-> ```bash
-> pip install --user --break-system-packages emkeel
-> ```
->
-> Then close and reopen the terminal. *(On a shared/company server you can also ask whoever
-> manages it to run `sudo apt install pipx` once — then the normal step 3 works.)*
-
-**4. Check it worked.** Type:
-
-```bash
-emkeel version
-```
-
-You should see `emkeel 0.1.x`. If it says "command not found", close and reopen the terminal
-and try again.
-
-**5. Open your project** in your editor (e.g. VS Code) — a project you already have, or a new
-empty folder.
-
-**6. Get your setup instructions.** Back in the terminal, type:
+Prefer to do it yourself? On a new branch, run (with your details):
 
 ```bash
-emkeel onboard
-```
-
-Then **select and copy everything it prints.**
-
-**7. Hand it to your AI assistant.** Open your AI coding agent (e.g. Claude Code inside VS
-Code), **paste** what you copied into its chat, and press Enter. It will ask you a few things
-(your GitHub repo, your Jira address and project key) and set everything up for you —
-including clickable links for the couple of steps only you can do (create secrets, turn on
-branch protection).
-
-*Done.* Your repo is now governed by Emkeel.
-
-## Set up your repo (already installed)
-
-```bash
-emkeel onboard   # prints the AI playbook — paste it to your agent
-```
-
-**Manual (no AI):**
-
-```bash
+git checkout -b chore/SCRUM-1-adopt-emkeel
 emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
 ```
 
-Non-clobbering (add `--dry-run` to preview); prints the exact connect links. Full guide: `docs/install.md`.
+It creates the files and prints the same connect links — follow them. Same rule: secrets go in
+GitHub's secret page or `.env`, **never shared in plain text**.
 
 ## Managing Emkeel
 
