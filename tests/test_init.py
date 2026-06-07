@@ -76,9 +76,12 @@ def test_emkeel_source_flows_into_ci_and_toml(tmp_path):
     assert f'source = "{src}"' in toml
 
 
-def test_default_source_is_pypi_name(tmp_path):
+def test_default_source_is_version_pinned(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
-    assert 'pip install "emkeel"' in (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    # pinned (compatible-release), never a bare unpinned name
+    assert 'pip install "emkeel~=' in ci
+    assert 'pip install "emkeel"' not in ci
 
 
 def test_checklist_mentions_token_only_for_private_source():
