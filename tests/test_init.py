@@ -95,4 +95,5 @@ def test_main_smoke(tmp_path, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "emkeel init [applied]" in out and "NEXT — connect Emkeel" in out
+    assert "https://github.com/o/r/settings/secrets/actions/new" in out  # link-rich
     assert (tmp_path / "emkeel.toml").is_file()

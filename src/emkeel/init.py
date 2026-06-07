@@ -204,23 +204,31 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
 
 def connection_checklist(cfg: Config) -> str:
     repo = cfg.github_repo or "<owner>/<repo>"
+    jira = cfg.jira_url or "https://your.atlassian.net"
+    base = f"https://github.com/{repo}"
     lines = [
-        "NEXT — connect Emkeel (one-time):",
-        "  1. GitHub for Jira app → install & link the repo so commits/PRs link to tickets.",
-        f"  2. Branch protection on main of {repo}: require the 'gates' check + a PR.",
-        "  3. Add JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN as GitHub Actions secrets.",
-        "  4. Local: cp .env.example .env and fill it (it is gitignored).",
+        "NEXT — connect Emkeel (one-time). Steps you do, with the exact links:",
+        "",
+        "  1. Create a Jira API token:",
+        "     https://id.atlassian.net/manage-profile/security/api-tokens",
+        "",
+        f"  2. Add repo Actions secrets:  {base}/settings/secrets/actions/new",
+        f"       JIRA_BASE_URL = {jira}",
+        "       JIRA_EMAIL    = <your Atlassian email>",
+        "       JIRA_TOKEN    = <the token from step 1>",
+        "",
+        "  3. Branch protection on 'main' (require the 'gates' check + a PR):",
+        f"     {base}/settings/branches",
+        "",
+        "  4. (optional) GitHub for Jira app (links commits/PRs to tickets):",
+        "     https://github.com/marketplace/jira-software-github",
     ]
     if "EMKEEL_INSTALL_TOKEN" in cfg.emkeel_source:
-        lines.append(
-            "  5. Add EMKEEL_INSTALL_TOKEN secret (a fine-grained PAT with READ access to the "
-            "emkeel repo) — the CI uses it to install the private package."
-        )
-    else:
-        lines.append(
-            "  5. Ensure the CI 'Install emkeel' source is reachable "
-            f"(currently: pip install {cfg.emkeel_source})."
-        )
+        lines += [
+            "",
+            f"  5. Private fork only — add the EMKEEL_INSTALL_TOKEN secret:  {base}/settings/secrets/actions/new",
+            "       (a fine-grained PAT with READ access to your emkeel fork)",
+        ]
     return "\n".join(lines) + "\n"
 
 
