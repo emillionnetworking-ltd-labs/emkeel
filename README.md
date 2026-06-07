@@ -6,61 +6,57 @@ human-approved merge → the ticket closes itself. `"done"` is a **computed fact
 self-attested flag — enforcement lives server-side (CI + branch protection), out of the
 agent's reach.
 
-## Getting started
+## Install
 
-**You'll need:** Python 3.11+, [`pipx`](https://pipx.pypa.io) (`sudo apt install pipx` on
-Debian/Ubuntu), `git`, a GitHub account, and a Jira account + a project.
+Emkeel is a **zero-dependency** Python CLI (needs **Python 3.11+**). Recommended installer:
+[`pipx`](https://pipx.pypa.io). Pick your platform:
 
-1. **Install Emkeel** — use pipx (one method; see the note below):
+| Platform | Install |
+| --- | --- |
+| **Windows** | `py -m pip install --user pipx` → `py -m pipx ensurepath` → `pipx install emkeel` |
+| **macOS** | `brew install pipx` → `pipx install emkeel` |
+| **Linux** (Debian/Ubuntu) | `sudo apt install pipx` → `pipx install emkeel` |
+| **Locked-down server** (no sudo, no `python3-venv`) | `pip install --user --break-system-packages emkeel` |
 
-   ```bash
-   pipx install emkeel        # already have it? → pipx upgrade emkeel
-   ```
+The locked-down `pip --user` path is **safe**: emkeel has no runtime dependencies, so nothing
+can conflict in your user site. (Plain `pip install emkeel` is blocked on PEP 668 Linux/macOS
+— that's why the table uses pipx, or `--user --break-system-packages`.)
 
-2. **Open your project** in your editor — an existing repo, or a new empty folder.
+**Upgrade:** `pipx upgrade emkeel` · **Check version:** `emkeel version`
 
-3. **Run the guided setup:**
+## Set up your repo
+
+1. **Open your project** in your editor — an existing repo, or a new empty folder.
+2. **Run the guided setup:**
 
    ```bash
    emkeel onboard
    ```
 
-   Paste its output to your AI coding agent (VS Code + Claude Code, Cursor, …) and it sets the
-   repo up **in your language**, handing you the exact links for the steps only you can do
+   Paste its output to your AI coding agent (Claude Code, Cursor, …) — it scaffolds and connects
+   the repo **in your language**, handing you the exact links for the steps only you can do
    (create secrets, turn on branch protection). Or follow the printed steps yourself.
+
+**Manual (no AI):**
+
+```bash
+emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
+```
+
+Non-clobbering (add `--dry-run` to preview); prints the exact connect links. Full guide: `docs/install.md`.
 
 ## Managing Emkeel
 
 | Action | Command |
 | --- | --- |
-| **Install** | `pipx install emkeel` |
-| **Upgrade** (already installed) | `pipx upgrade emkeel` |
+| **Upgrade** | `pipx upgrade emkeel` |
 | **Check version / updates** | `emkeel version` |
-| **Set up a repo** | `emkeel onboard` (AI-guided) · or `emkeel init` (manual, below) |
 | **Remove from a repo** | `emkeel uninstall` (preview; add `--yes` to apply — keeps `emkeel-governance/`) |
 | **Remove the tool** | `pipx uninstall emkeel` |
 
-> **Use one install method.** With pipx, `pipx install emkeel` detects an existing install and
-> tells you to `pipx upgrade emkeel` — so a re-run never makes a mess. **Don't mix** pipx with
-> `pip --user`/venv; that creates shadowing, conflicting installs. No pipx available? A venv is
-> idempotent too: `python3 -m venv .venv && . .venv/bin/activate && pip install -U emkeel`.
->
-> **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0` — it auto-takes patches and
-> minors; a breaking major (e.g. `0.2.0`) is opt-in (you bump the pin).
-
-## Manual setup (no AI)
-
-```bash
-# existing repo
-emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
-
-# new project
-mkdir my-project && cd my-project && git init
-emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
-```
-
-`emkeel init` is non-clobbering (add `--dry-run` to preview) and prints the exact links to
-finish setup. Full guide: `docs/install.md`.
+> **Use one install method** — don't mix pipx with `pip --user`/venv; that creates shadowing,
+> conflicting installs. **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0`, so it
+> auto-takes patches and minors; a breaking major (e.g. `0.2.0`) is opt-in (you bump the pin).
 
 ## What you get
 

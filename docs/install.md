@@ -8,22 +8,19 @@ auto-transition workflow, the `emkeel-governance/` folder, connection config, an
 
 You need: Python 3.11+, `git`, a GitHub account, and a Jira account + project.
 
-Emkeel is a CLI tool, so install it with **pipx** (isolated; avoids the PEP 668
-"externally-managed" error that plain `pip` hits on modern Debian/Ubuntu/macOS):
+Emkeel is a **zero-dependency** Python CLI. Recommended installer: `pipx`. By platform:
 
-```bash
-pipx install emkeel
-# no pipx yet? Debian/Ubuntu: sudo apt install pipx && pipx ensurepath
-```
+- **Windows:** `py -m pip install --user pipx` → `py -m pipx ensurepath` → `pipx install emkeel`
+  (or simply `py -m pip install emkeel` — Windows Python has no PEP 668 restriction).
+- **macOS:** `brew install pipx` → `pipx install emkeel`.
+- **Linux (Debian/Ubuntu, with sudo):** `sudo apt install pipx` → `pipx install emkeel`
+  (`apt` pulls in `python3-venv`, which pipx needs to build the isolated env).
+- **Locked-down server (no sudo, no `python3-venv`):**
+  `pip install --user --break-system-packages emkeel` — safe, since emkeel has no runtime deps,
+  so nothing can conflict in your user site.
 
-No pipx available? Use a venv instead (`-U` makes a re-run idempotent — install or upgrade):
-
-```bash
-python3 -m venv .venv && . .venv/bin/activate && pip install -U emkeel
-```
-
-> Use **one** method. `pipx install emkeel` detects an existing pipx install and tells you to
-> `pipx upgrade emkeel`. Don't mix pipx with `pip --user`/venv — that shadows installs.
+> Use **one** method (don't mix pipx with `pip --user`/venv — that shadows installs). `pipx
+> install emkeel` detects an existing install and tells you to `pipx upgrade emkeel`.
 
 ## 2. Scaffold — pick your scenario
 
