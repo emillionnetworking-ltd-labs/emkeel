@@ -48,4 +48,6 @@ emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --ji
 Open a small PR: the `gates` check runs (ticket link; spec + acceptance criteria for
 features; full test suite). Merge → the linked ticket moves to Done.
 
-> Prefer a hands-held setup? Run `emkeel onboard` and paste its output to your AI agent.
+> Prefer AI-assisted? Tell your agent, verbatim: *Install and set up Emkeel in this repo:
+> run `pip install emkeel`, then `emkeel onboard`, and follow what it prints. Ask me for my
+> GitHub repo, Jira URL, and Jira project key.*
