@@ -60,3 +60,13 @@ features; full test suite). Merge → the linked ticket moves to Done.
 > Prefer AI-assisted? Tell your agent, verbatim: *Install and set up Emkeel in this repo:
 > install it with `pipx install emkeel` (or `pip` inside a venv), then run `emkeel onboard`,
 > and follow what it prints. Ask me for my GitHub repo, Jira URL, and Jira project key.*
+
+## 5. Updating & uninstalling
+
+- **Check your version:** `emkeel version` (tells you if a newer one is on PyPI).
+- **Upgrade the tool:** `pipx upgrade emkeel`.
+- **Your repo's CI** pins `emkeel~=0.MINOR.0`, so it auto-takes patches/minors on each run; a
+  breaking major (e.g. `0.2.0`) is **opt-in** — bump the pin in `emkeel.toml`/the workflow.
+- **Uninstall from a repo:** `emkeel uninstall` (dry-run; add `--yes` to apply). It removes
+  the wiring but **keeps** `emkeel-governance/` unless you pass `--purge`.
+- **Remove the tool:** `pipx uninstall emkeel`.
