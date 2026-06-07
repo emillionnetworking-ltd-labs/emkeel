@@ -19,9 +19,11 @@ python -m emkeel.init /path/to/repo --jira-url ... --jira-project KEY --github-r
 
 ### Install source (private emkeel)
 
-The generated CI runs `pip install <source>`. Default is `emkeel` (the PyPI name, for
-when published). For a **private** emkeel, pass a git+token form and add the token as a
-repo secret:
+The generated CI runs `pip install <source>`. **Default:** the public repo pinned to the
+release tag (token-less), e.g. `git+https://github.com/.../emkeel.git@v0.1.0` — works for
+anyone, no account, no token. Once emkeel is on PyPI you can pass `--emkeel-source 'emkeel~=0.1.0'`.
+
+For a **private fork**, pass a git+token form and add the token as a repo secret:
 
 ```bash
 python -m emkeel.init /path/to/repo ... \
