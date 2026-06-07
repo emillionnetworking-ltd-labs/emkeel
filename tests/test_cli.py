@@ -27,3 +27,9 @@ def test_init_dispatch(tmp_path):
 def test_review_dispatch_returns_usage_without_key():
     # review.main returns 2 (usage) when no key is given
     assert main(["review"]) == 2
+
+
+def test_eject_and_uninstall_alias(tmp_path):
+    # `eject` is the command; `uninstall` is the backward-compat alias. Both dry-run by default.
+    assert main(["eject", str(tmp_path)]) == 0
+    assert main(["uninstall", str(tmp_path)]) == 0

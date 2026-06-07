@@ -66,6 +66,10 @@ features; full test suite). Merge → the linked ticket moves to Done.
 - **Upgrade the tool:** `pipx upgrade emkeel`.
 - **Your repo's CI** pins `emkeel~=0.MINOR.0`, so it auto-takes patches/minors on each run; a
   breaking major (e.g. `0.2.0`) is **opt-in** — bump the pin in `emkeel.toml`/the workflow.
-- **Uninstall from a repo:** `emkeel uninstall` (dry-run; add `--yes` to apply). It removes
-  the wiring but **keeps** `emkeel-governance/` unless you pass `--purge`.
+- **Un-govern a repo:** `emkeel eject` *(alias: `emkeel uninstall`)* — dry-run; add `--yes` to
+  apply. Removes the wiring (workflows, `emkeel.toml`, `AGENTS.md`, `CLAUDE.md`, `.env.example`)
+  but **keeps** `emkeel-governance/` unless you pass `--purge`. It never strips lines you already
+  had in `.gitignore`/`.gitattributes`. (`emkeel onboard` installs nothing — it only prints the guide.)
+- **Re-govern a repo** (undo an eject): run `emkeel init` again — it re-creates the wiring, and
+  your `emkeel-governance/` history is preserved (unless you had used `--purge`).
 - **Remove the tool:** `pipx uninstall emkeel`.
