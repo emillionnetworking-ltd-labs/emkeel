@@ -55,6 +55,7 @@ def _files(cfg: Config) -> dict[str, str]:
         "emkeel.toml": _toml(cfg),
         ".env.example": _env_example(),
         "AGENTS.md": _agents_md(),
+        "CLAUDE.md": _claude_md(),
     }
 
 
@@ -200,6 +201,16 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
 ## Separation
 - `emkeel-governance/` holds artifacts (specs/adr/records); it is `export-ignore` (never distributed).
 """
+
+
+def _claude_md() -> str:
+    # AGENTS.md is the cross-tool canonical contract. Claude Code reads CLAUDE.md, so this
+    # file just imports AGENTS.md (portable — a real file with an @import, not a symlink).
+    return (
+        "# This repo is governed by Emkeel. The agent contract is AGENTS.md.\n"
+        "# Claude Code reads CLAUDE.md, so AGENTS.md is imported below:\n"
+        "@AGENTS.md\n"
+    )
 
 
 def connection_checklist(cfg: Config) -> str:

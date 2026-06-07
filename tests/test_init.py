@@ -16,8 +16,15 @@ def test_plan_on_empty_target_creates_everything(tmp_path):
     assert k["emkeel.toml"] == "create"
     assert k[".github/workflows/emkeel-ci.yml"] == "create"
     assert k[".github/workflows/jira-transition.yml"] == "create"
+    assert k["AGENTS.md"] == "create"
+    assert k["CLAUDE.md"] == "create"
     assert k[".gitattributes"] == "append"
     assert k[".gitignore"] == "append"
+
+
+def test_claude_md_imports_agents(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert "@AGENTS.md" in (tmp_path / "CLAUDE.md").read_text()
 
 
 def test_plan_is_non_clobbering(tmp_path):
