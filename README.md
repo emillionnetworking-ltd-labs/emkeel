@@ -12,25 +12,35 @@ agent's reach.
 Debian/Ubuntu), `git`, a GitHub account, a Jira account + a project, and an IDE with an AI
 coding agent — e.g. **VS Code with Claude Code**, or Cursor.
 
-1. **Open your project in your AI IDE** — either an **existing repo** you already have, or a
-   **new empty folder** for a project from scratch.
+1. **Open your project in your AI IDE** — an existing repo, or a new empty folder.
 2. **Tell your AI agent, verbatim:**
 
-   > Install and set up Emkeel in this repo: install it with `pipx install emkeel` (or `pip`
-   > inside a venv), then run `emkeel onboard`, and follow what it prints. Ask me for my
-   > GitHub repo, Jira URL, and Jira project key.
+   > Install and set up Emkeel in this repo: install it with `pipx install emkeel`, then run
+   > `emkeel onboard`, and follow what it prints. Ask me for my GitHub repo, Jira URL, and
+   > Jira project key.
 
 3. The agent installs Emkeel, runs the guided onboarding, and walks you through the rest
-   **in your language**, handing you the **exact links** for the steps only you can do
+   **in your language**, handing you the exact links for the steps only you can do
    (create secrets, turn on branch protection).
 
-> Prefer to run it yourself? `pipx install emkeel`, then `emkeel onboard`, and follow it.
-> (No pipx? Use a venv: `python3 -m venv .venv && . .venv/bin/activate && pip install emkeel`.
-> Plain `pip install emkeel` fails on modern systems — externally-managed, PEP 668.)
+## Managing Emkeel
+
+| Action | Command |
+| --- | --- |
+| **Install** | `pipx install emkeel` |
+| **Check version / updates** | `emkeel version` |
+| **Upgrade** | `pipx upgrade emkeel` |
+| **Set up a repo** | `emkeel onboard` (AI-guided) · or `emkeel init` (manual, below) |
+| **Remove from a repo** | `emkeel uninstall` (preview; add `--yes` to apply — keeps `emkeel-governance/`) |
+| **Remove the tool** | `pipx uninstall emkeel` |
+
+> **No `pipx`?** Use a venv: `python3 -m venv .venv && . .venv/bin/activate && pip install emkeel`.
+> (Plain `pip install emkeel` fails on modern systems — externally-managed, PEP 668.)
+>
+> **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0`, so it auto-takes patches and
+> minors; a breaking major (e.g. `0.2.0`) is opt-in — you bump the pin yourself.
 
 ## Manual setup (no AI)
-
-Prefer to do it by hand? Run `emkeel init` and follow the printed checklist:
 
 ```bash
 # existing repo
