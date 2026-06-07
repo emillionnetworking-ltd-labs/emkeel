@@ -25,6 +25,7 @@ packages = ["src/emkeel"]
 # (NOTE: .gitattributes export-ignore does NOT affect the sdist — this allowlist does.)
 include = [
   "src/emkeel",
+  "docs",
   "README.md",
   "LICENSE",
   "NOTICE",
