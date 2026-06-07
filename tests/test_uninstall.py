@@ -19,8 +19,18 @@ def test_uninstall_removes_wiring_keeps_governance(tmp_path):
     assert not (tmp_path / "AGENTS.md").exists()
     assert not (tmp_path / "CLAUDE.md").exists()
     assert (tmp_path / "emkeel-governance").is_dir()  # history kept
-    assert "emkeel-governance/ export-ignore" not in (tmp_path / ".gitattributes").read_text()
-    assert ".env" not in (tmp_path / ".gitignore").read_text()
+    # emkeel created both here (fresh tmp → each holds only emkeel's line) → removed entirely
+    assert not (tmp_path / ".gitattributes").exists()
+    assert not (tmp_path / ".gitignore").exists()
+
+
+def test_uninstall_preserves_user_gitignore(tmp_path):
+    # The user already had a .gitignore (with their own .env) before Emkeel.
+    (tmp_path / ".gitignore").write_text("node_modules/\n.env\ndist/\n")
+    apply(tmp_path, CFG, force=False, dry_run=False)        # init: .env present → append-skip
+    apply_uninstall(tmp_path, purge=False, dry_run=False)
+    gi = (tmp_path / ".gitignore").read_text()
+    assert "node_modules/" in gi and ".env" in gi and "dist/" in gi  # untouched, not stripped
 
 
 def test_purge_also_removes_governance(tmp_path):
