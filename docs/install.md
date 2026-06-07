@@ -6,11 +6,20 @@ auto-transition workflow, the `emkeel-governance/` folder, connection config, an
 
 ## 1. Prerequisites & install
 
-You need: Python 3.11+ (with `pip`), `git`, a GitHub account, and a Jira account + project.
-Then open your repo in your editor and:
+You need: Python 3.11+, `git`, a GitHub account, and a Jira account + project.
+
+Emkeel is a CLI tool, so install it with **pipx** (isolated; avoids the PEP 668
+"externally-managed" error that plain `pip` hits on modern Debian/Ubuntu/macOS):
 
 ```bash
-pip install emkeel
+pipx install emkeel
+# no pipx yet? Debian/Ubuntu: sudo apt install pipx && pipx ensurepath
+```
+
+No pipx available? Use a venv instead:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate && pip install emkeel
 ```
 
 ## 2. Scaffold — pick your scenario
@@ -49,5 +58,5 @@ Open a small PR: the `gates` check runs (ticket link; spec + acceptance criteria
 features; full test suite). Merge → the linked ticket moves to Done.
 
 > Prefer AI-assisted? Tell your agent, verbatim: *Install and set up Emkeel in this repo:
-> run `pip install emkeel`, then `emkeel onboard`, and follow what it prints. Ask me for my
-> GitHub repo, Jira URL, and Jira project key.*
+> install it with `pipx install emkeel` (or `pip` inside a venv), then run `emkeel onboard`,
+> and follow what it prints. Ask me for my GitHub repo, Jira URL, and Jira project key.*
