@@ -74,16 +74,29 @@ GitHub's secret page or `.env`, **never shared in plain text**.
 
 ## Managing Emkeel
 
-| Action | Command |
-| --- | --- |
-| **Upgrade** | `pipx upgrade emkeel` |
-| **Check version / updates** | `emkeel version` |
-| **Remove from a repo** | `emkeel uninstall` (preview; add `--yes` to apply — keeps `emkeel-governance/`) |
-| **Remove the tool** | `pipx uninstall emkeel` |
+There are **three separate things**, so "remove" means different things — pick the one you want:
 
-> **Use one install method** — don't mix pipx with `pip --user`/venv; that creates shadowing,
-> conflicting installs. **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0`, so it
-> auto-takes patches and minors; a breaking major (e.g. `0.2.0`) is opt-in (you bump the pin).
+| You want to… | Command | What it touches |
+| --- | --- | --- |
+| **Upgrade the tool** | `pipx upgrade emkeel` | the `emkeel` program on your machine |
+| **Check the version** | `emkeel version` | (also flags a newer one on PyPI) |
+| **Un-govern a repo** (remove Emkeel's files) | `emkeel eject` *(alias: `emkeel uninstall`)* | the repo's wiring: workflows, `emkeel.toml`, `.env.example`, `AGENTS.md`, `CLAUDE.md`. **Keeps** `emkeel-governance/` (your history) — add `--purge` to delete that too. |
+| **Uninstall the tool** | `pipx uninstall emkeel` | removes the `emkeel` program from your machine |
+
+> **`emkeel eject` does NOT remove the tool** — it reverses `emkeel init` inside one repo. It's a
+> safe **dry-run** by default; add `--yes` to apply. It never strips lines you already had in
+> `.gitignore`/`.gitattributes`. (And `emkeel onboard` installs nothing — it only **prints** the guide.)
+
+**To remove Emkeel completely:**
+
+```bash
+emkeel eject --purge --yes   # in the repo: wiring + governance folder
+pipx uninstall emkeel        # the tool, from your machine
+```
+
+> **Use one install method** — don't mix pipx with `pip --user`/venv (that creates conflicting
+> copies). **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0`, so it auto-takes
+> patches and minors; a breaking major (e.g. `0.2.0`) is opt-in (you bump the pin).
 
 ## What you get
 

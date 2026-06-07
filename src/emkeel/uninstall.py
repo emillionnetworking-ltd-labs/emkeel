@@ -1,4 +1,4 @@
-"""emkeel uninstall — reverse `emkeel init` in a repo.
+"""emkeel eject — reverse `emkeel init` in a repo (command: `emkeel eject`; alias: `emkeel uninstall`).
 
 Removes the wiring Emkeel added (workflows, emkeel.toml, .env.example, AGENTS.md, CLAUDE.md).
 For .gitattributes/.gitignore it removes the file **only if Emkeel created it** (it holds just
@@ -69,8 +69,8 @@ def apply_uninstall(target: Path, purge: bool, dry_run: bool) -> list[Action]:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        prog="emkeel uninstall",
-        description="Reverse `emkeel init` (keeps emkeel-governance/ unless --purge).",
+        prog="emkeel eject",
+        description="Reverse `emkeel init` in this repo (keeps emkeel-governance/ unless --purge).",
     )
     ap.add_argument("path", nargs="?", default=".")
     ap.add_argument("--purge", action="store_true", help="also delete emkeel-governance/ (your artifacts)")

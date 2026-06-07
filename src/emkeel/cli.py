@@ -4,7 +4,7 @@ Subcommands:
   emkeel init [opts]     scaffold a repo for Emkeel governance
   emkeel onboard         print the AI-assisted onboarding playbook (paste it to your agent)
   emkeel review <KEY>    print a per-criterion review template for a ticket
-  emkeel uninstall       reverse `emkeel init` in this repo (dry-run unless --yes)
+  emkeel eject           reverse `emkeel init` in this repo (alias: uninstall; dry-run unless --yes)
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 import sys
 from importlib import resources
 
-_USAGE = "usage: emkeel <init|onboard|review|uninstall|version> [args]   (try: emkeel onboard)"
+_USAGE = "usage: emkeel <init|onboard|review|eject|version> [args]   (try: emkeel onboard)"
 
 
 def _onboard() -> int:
@@ -44,9 +44,9 @@ def main(argv: list[str] | None = None) -> int:
         return review_main(rest)
     if cmd == "onboard":
         return _onboard()
-    if cmd == "uninstall":
-        from emkeel.uninstall import main as uninstall_main
-        return uninstall_main(rest)
+    if cmd in ("eject", "uninstall"):  # uninstall = backward-compat alias
+        from emkeel.uninstall import main as eject_main
+        return eject_main(rest)
     print(f"unknown command: {cmd}\n{_USAGE}", file=sys.stderr)
     return 2
 
