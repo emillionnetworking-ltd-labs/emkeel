@@ -6,38 +6,44 @@ human-approved merge → the ticket closes itself. `"done"` is a **computed fact
 self-attested flag — enforcement lives server-side (CI + branch protection), out of the
 agent's reach.
 
-## Install
+## Getting started (AI-assisted — recommended)
+
+**You'll need:** Python 3.11+ (with `pip`), `git`, a GitHub account, a Jira account + a
+project, and an IDE with an AI coding agent — e.g. **VS Code with Claude Code**, or Cursor.
+
+1. **Open your project in your AI IDE.** Open the folder you want to govern — either:
+   - an **existing repo** you already have (Emkeel adds governance to it), or
+   - a **new empty folder** (Emkeel helps you start a governed project from scratch).
+2. **Install Emkeel:**
+   ```bash
+   pip install emkeel
+   ```
+3. **Start the guided setup, then paste it to your agent:**
+   ```bash
+   emkeel onboard
+   ```
+   Copy the printed output into your AI agent's chat. It asks you a couple of questions
+   (existing repo or new? your GitHub repo, Jira URL, project key) and then sets everything
+   up **in your language**, handing you the **exact links** for the steps only you can do
+   (create secrets, turn on branch protection).
+
+That's it — the agent drives the rest, one step at a time.
+
+## Manual setup (no AI)
+
+Prefer to do it by hand? Run `emkeel init` and follow the printed checklist:
 
 ```bash
-pip install emkeel
-```
-
-## Quickstart
-
-**Add to an existing repo:**
-
-```bash
-cd your-repo
+# existing repo
 emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
-```
 
-**Or start a new project from scratch:**
-
-```bash
+# new project
 mkdir my-project && cd my-project && git init
 emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
 ```
 
-`emkeel init` is **non-clobbering** (it never overwrites your files; add `--dry-run` to
-preview) and prints a **guided checklist with the exact links** to finish setup (secrets,
-branch protection).
-
-## Two ways to set up
-
-- **Manual** — run `emkeel init` and follow the printed checklist. Full guide: `docs/install.md`.
-- **AI-assisted** — run `emkeel onboard` and paste its output to your coding agent
-  (Claude Code, Cursor, …). It asks you for your repo/Jira details and sets Emkeel up
-  **conversationally, in your language**, surfacing the links in real time.
+`emkeel init` is non-clobbering (add `--dry-run` to preview) and prints the exact links to
+finish setup. Full guide: `docs/install.md`.
 
 ## What you get
 
@@ -45,8 +51,7 @@ branch protection).
   features carry a spec with acceptance criteria; the full test suite runs on every PR.
 - **AI review-assist** — a per-criterion verdict against the spec before you merge.
 - **Auto-close** — merging transitions the linked Jira ticket to Done.
-- **Clean separation** — all governance artifacts live in one `emkeel-governance/` folder,
-  never shipped in the package.
+- **Clean separation** — governance artifacts live in one `emkeel-governance/` folder, never shipped.
 
 See `docs/lifecycle.md` for the model.
 
