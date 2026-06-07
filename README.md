@@ -62,15 +62,45 @@ Two ways to set up: **AI-assisted (recommended)** or **manual**. Both start by i
 
 ### Option B — Manual (no AI)
 
-Prefer to do it yourself? On a new branch, run (with your details):
+#### B1 · Existing repo — add governance to a project you already have
 
-```bash
-git checkout -b chore/SCRUM-1-adopt-emkeel
-emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
-```
+1. New branch (use a real Jira key so the gate passes):
+   ```bash
+   git checkout -b chore/SCRUM-123-adopt-emkeel
+   ```
+2. Scaffold (your values):
+   ```bash
+   emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
+   ```
+3. Stage **only** Emkeel's files (not `git add -A`) and commit:
+   ```bash
+   git add emkeel.toml .env.example .gitattributes AGENTS.md CLAUDE.md \
+           .github/workflows/emkeel-ci.yml .github/workflows/jira-transition.yml emkeel-governance/
+   git commit -m "chore(emkeel): adopt governance (SCRUM-123)"
+   git push -u origin HEAD
+   ```
+4. Open a Pull Request — the `gates` check runs on it. Merge it.
 
-It creates the files and prints the same connect links — follow them. Same rule: secrets go in
-GitHub's secret page or `.env`, **never shared in plain text**.
+#### B2 · New project — from an empty folder
+
+1. Create + initialize:
+   ```bash
+   mkdir my-project && cd my-project && git init
+   ```
+2. Scaffold (your values):
+   ```bash
+   emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
+   ```
+3. First commit, then create the GitHub repo and push (`git add -A` is fine here — the folder
+   is empty and yours):
+   ```bash
+   git add -A && git commit -m "chore: initial commit with Emkeel governance"
+   gh repo create OWNER/REPO --private --source=. --push
+   ```
+
+**Both:** finish the connect steps `emkeel init` printed — create a Jira token → add it as a
+GitHub **secret** (🔒 never paste it in plain text), and turn on branch protection.
+*(Changed your mind? `emkeel eject` reverses it — see Managing Emkeel.)*
 
 ## Managing Emkeel
 
