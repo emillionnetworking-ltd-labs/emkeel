@@ -1,0 +1,27 @@
+name: jira-transition
+
+# Post-merge automation (NOT a gate): when a PR merges, move its linked ticket to Done.
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  transition:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install emkeel
+        run: pip install -e .
+      - name: Transition linked ticket to Done
+        continue-on-error: true  # best-effort; never block on a Jira hiccup
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python -m emkeel.jira

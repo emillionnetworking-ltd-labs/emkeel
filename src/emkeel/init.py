@@ -36,6 +36,7 @@ def _files(cfg: Config) -> dict[str, str]:
         "emkeel-governance/adr/.gitkeep": "",
         "emkeel-governance/records/.gitkeep": "",
         ".github/workflows/emkeel-ci.yml": _ci_yaml(),
+        ".github/workflows/jira-transition.yml": _jira_yaml(),
         "emkeel.toml": _toml(cfg),
         ".env.example": _env_example(),
         "AGENTS.md": _agents_md(),
@@ -137,6 +138,37 @@ jobs:
         env:
           EMKEEL_BRANCH: ${{ github.head_ref }}
         run: python -m emkeel.gates.check_acceptance_criteria
+"""
+
+
+def _jira_yaml() -> str:
+    return """name: jira-transition
+
+# Post-merge automation (NOT a gate): when a PR merges, move its linked ticket to Done.
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  transition:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # TODO: until emkeel is on PyPI, replace with your install source.
+      - name: Install emkeel
+        run: pip install emkeel
+      - name: Transition linked ticket to Done
+        continue-on-error: true
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+        run: python -m emkeel.jira
 """
 
 
