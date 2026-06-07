@@ -47,7 +47,10 @@ Two ways to set up: **AI-assisted (recommended)** or **manual**. Both start by i
    sidebar. (Cursor: open the chat with Ctrl/Cmd+L.)
 3. **Type this in the chat:**
    > Set up Emkeel in this repo: run `emkeel onboard` and follow it.
-4. The assistant will **ask you three things** — answer with your details:
+
+   The assistant **explains each step in plain language as it goes**, and asks whether this is
+   a **trial** (it cleans everything up afterwards) or a **real adoption**.
+4. It will also **ask you three things** — answer with your details:
    - your **GitHub repo** — like `acme/web`
    - your **Jira address** — like `https://acme.atlassian.net`
    - your **Jira project key** — like `SCRUM`
