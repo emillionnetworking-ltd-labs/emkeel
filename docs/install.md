@@ -1,49 +1,48 @@
-# Installing Emkeel in a repo
+# Installing Emkeel (manual)
 
-`emkeel init` scaffolds a target repo to be governed by Emkeel. It is **non-clobbering**
-(existing files are skipped unless `--force`) and **never writes secrets**.
+`emkeel init` scaffolds a repo for Emkeel governance: a CI gates workflow, a Jira
+auto-transition workflow, the `emkeel-governance/` folder, connection config, and an
+`AGENTS.md`. It is **non-clobbering** and **never writes secrets**.
 
-## Run
-
-```bash
-# Dry-run first (writes nothing, shows the plan):
-python -m emkeel.init /path/to/repo \
-  --jira-url https://your.atlassian.net \
-  --jira-project KEY \
-  --github-repo owner/repo \
-  --dry-run
-
-# Then for real:
-python -m emkeel.init /path/to/repo --jira-url ... --jira-project KEY --github-repo owner/repo
-```
-
-### Install source (private emkeel)
-
-The generated CI runs `pip install <source>`. **Default:** the PyPI package, version-pinned
-(`emkeel~=0.1.0`) — `pip install emkeel`, no account, no token.
-
-For a **private fork**, pass a git+token form and add the token as a repo secret:
+## 1. Install
 
 ```bash
-python -m emkeel.init /path/to/repo ... \
-  --emkeel-source 'git+https://x-access-token:${EMKEEL_INSTALL_TOKEN}@github.com/OWNER/emkeel.git'
+pip install emkeel
 ```
 
-Then add `EMKEEL_INSTALL_TOKEN` (a fine-grained PAT with READ access to the emkeel repo)
-as a GitHub Actions secret in the target repo.
+## 2. Scaffold — pick your scenario
 
-## What it creates
+**A) Existing repo** (add governance to a project you already have):
 
-- `emkeel-governance/{specs,adr,records}/` — the single artifact folder (`export-ignore`).
-- `.github/workflows/emkeel-ci.yml` — runs the gates on PRs.
-- `emkeel.toml` — non-secret config (Jira URL + project key, GitHub repo).
-- `.env.example` — secrets template (real `.env` is gitignored, never committed).
-- `AGENTS.md` — the agent contract (skipped if one already exists).
+```bash
+cd your-repo
+emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY --dry-run   # preview
+emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
+```
 
-## Connect (one-time, printed by the command)
+It won't overwrite existing files (use `--force` only on purpose). On an active repo, keep
+the `gates` check **non-required at first** so you don't break your current CI, and adopt
+the branch/spec conventions gradually.
 
-1. **GitHub for Jira** app → install & link the repo (commits/PRs link to tickets).
-2. **Branch protection** on `main` → require the `gates` check + a PR.
-3. **Secrets** → add `JIRA_TOKEN` (+ `JIRA_EMAIL`) as GitHub Actions secrets.
-4. **Local** → `cp .env.example .env` and fill it.
-5. **Install source** → until Emkeel is on PyPI, point the CI `Install emkeel` line at your source.
+**B) New project** (start governed from scratch):
+
+```bash
+mkdir my-project && cd my-project && git init
+emkeel init . --github-repo OWNER/REPO --jira-url https://you.atlassian.net --jira-project KEY
+```
+
+## 3. Connect (the command prints these with the exact links)
+
+1. Jira API token — https://id.atlassian.net/manage-profile/security/api-tokens
+2. Repo Actions secrets `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_TOKEN` —
+   `https://github.com/OWNER/REPO/settings/secrets/actions/new`
+3. Branch protection on `main` (require the `gates` check + a PR) —
+   `https://github.com/OWNER/REPO/settings/branches`
+4. (optional) GitHub for Jira app — https://github.com/marketplace/jira-software-github
+
+## 4. Verify
+
+Open a small PR: the `gates` check runs (ticket link; spec + acceptance criteria for
+features; full test suite). Merge → the linked ticket moves to Done.
+
+> Prefer a hands-held setup? Use the **AI-assisted onboarding** — see `docs/onboarding.md`.
