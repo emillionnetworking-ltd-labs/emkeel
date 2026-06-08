@@ -7,6 +7,7 @@ Subcommands:
   emkeel review <KEY>    print a per-criterion review template for a ticket
   emkeel eject           reverse `emkeel init` in this repo (alias: uninstall; dry-run unless --yes)
   emkeel doctor          check what's set up and what's still pending (with fix links)
+  emkeel connect         automate the GitHub side via gh (branch protection, secrets; new repo: create+push)
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 import sys
 from importlib import resources
 
-_USAGE = "usage: emkeel <setup|init|onboard|review|eject|doctor|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|onboard|review|eject|doctor|connect|version> [args]   (try: emkeel setup)"
 
 
 def _onboard() -> int:
@@ -41,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "doctor":
         from emkeel.doctor import main as doctor_main
         return doctor_main(rest)
+    if cmd == "connect":
+        from emkeel.connect import main as connect_main
+        return connect_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)
