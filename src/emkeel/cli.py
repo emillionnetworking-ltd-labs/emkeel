@@ -9,6 +9,7 @@ Subcommands:
   emkeel doctor          check what's set up and what's still pending (with fix links)
   emkeel connect         automate the GitHub side via gh (branch protection, secrets; new repo: create+push)
   emkeel sync            after the adopt PR merges: checkout default + pull + delete the merged branch
+  emkeel update          refresh the generated wiring to the installed version (after pipx upgrade)
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -17,7 +18,7 @@ from __future__ import annotations
 import sys
 from importlib import resources
 
-_USAGE = "usage: emkeel <setup|init|onboard|review|eject|doctor|connect|sync|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|onboard|review|eject|doctor|connect|sync|update|version> [args]   (try: emkeel setup)"
 
 
 def _onboard() -> int:
@@ -49,6 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "sync":
         from emkeel.sync import main as sync_main
         return sync_main(rest)
+    if cmd == "update":
+        from emkeel.update import main as update_main
+        return update_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)
