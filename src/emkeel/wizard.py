@@ -40,6 +40,7 @@ T: dict[str, dict[str, str]] = {
     "done":      {"es": "Listo. Tu repo está preparado.", "en": "Done. Your repo is scaffolded."},
     "nextyou":   {"es": "Ahora tú (solo tú puedes):", "en": "Now you (only you can):"},
     "n_push":    {"es": "Subir y abrir un PR:", "en": "Push and open a PR:"},
+    "n_create":  {"es": "Crear el repo en GitHub y subir:", "en": "Create the GitHub repo and push:"},
     "secrets":   {"es": "Conexión (token Jira → GitHub Secrets, 🔒 nunca en texto plano):",
                   "en": "Connect (Jira token → GitHub Secrets, 🔒 never in plain text):"},
     "undo":      {"es": "Para deshacer todo:  emkeel eject", "en": "To undo everything:  emkeel eject"},
@@ -148,6 +149,9 @@ def next_steps(a: Answers) -> str:
     lines = ["", t("nextyou", a.lang)]
     if a.scenario == "existing":
         lines.append(f"  • {t('n_push', a.lang)}  git push -u origin HEAD  →  PR")
+    else:  # new project — the repo doesn't exist on GitHub yet; create + push it first
+        repo = a.github_repo or "OWNER/REPO"
+        lines.append(f"  • {t('n_create', a.lang)}  gh repo create {repo} --private --source=. --push")
     lines.append("")
     lines.append("  " + t("secrets", a.lang))
     lines.append(connection_checklist(cfg))
