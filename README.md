@@ -30,9 +30,10 @@ first) and does the setup. **No AI, deterministic.**
 emkeel setup            # or one-shot, without installing first:  pipx run emkeel setup
 ```
 
-It asks: language → existing repo or new project → trial or real → confirms your GitHub/Jira
-details → creates the branch + files + commit, and prints your remaining steps. *(The
-AI-assisted and fully-manual paths below still work if you prefer them.)*
+It asks: language → existing repo or new project → confirms your GitHub/Jira details →
+creates the branch + files + commit, and prints your remaining steps. Press **`c`** at any
+menu to cancel; **undo anytime** with `emkeel eject`. *(The AI-assisted and fully-manual
+paths below still work if you prefer them.)*
 
 ## Getting started — step by step (Linux)
 
