@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from emkeel.connect import (
-    current_branch, do_push, gh_ok, load_config, main, protection_body, repo_exists,
+    allow_auto_merge, current_branch, do_push, gh_ok, load_config, main, protection_body, repo_exists,
 )
 
 
@@ -122,6 +122,7 @@ def test_finish_adopt_pushes_pr_and_automerges(tmp_path, monkeypatch):
     joined = "\n".join(ran)
     assert "git push -u origin HEAD" in joined
     assert "pr create --fill" in joined
+    assert "allow_auto_merge=true" in joined              # repo setting enabled first
     assert "pr merge --auto --squash" in joined          # native auto-merge (waits for gates)
 
 
@@ -140,3 +141,9 @@ def test_finish_adopt_skipped_on_default_branch(tmp_path, monkeypatch):
     answers = iter(["n", "n"])                            # protect?(no) secrets?(no) — NO finish-adopt prompt
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run) == 0
     assert not any("pr merge" in r for r in ran)          # no auto-merge offered on the default branch
+
+
+def test_allow_auto_merge_patches_repo():
+    calls = []
+    allow_auto_merge("a/b", run=lambda args, **k: calls.append(" ".join(args)) or _ok())
+    assert "api -X PATCH repos/a/b -F allow_auto_merge=true" in calls[0]
