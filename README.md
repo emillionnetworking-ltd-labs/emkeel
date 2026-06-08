@@ -21,6 +21,19 @@ Jump to the **step-by-step guide** below.
 **Upgrade:** `pipx upgrade emkeel` · **Check version:** `emkeel version`
 *(Switching from `pip` to pipx? Run `pip uninstall emkeel` first to avoid two copies.)*
 
+## Easiest: the setup wizard
+
+After installing, just run the **interactive wizard** — it asks a few questions (language
+first) and does the setup. **No AI, deterministic.**
+
+```bash
+emkeel setup            # or one-shot, without installing first:  pipx run emkeel setup
+```
+
+It asks: language → existing repo or new project → trial or real → confirms your GitHub/Jira
+details → creates the branch + files + commit, and prints your remaining steps. *(The
+AI-assisted and fully-manual paths below still work if you prefer them.)*
+
 ## Getting started — step by step (Linux)
 
 Two ways to set up: **AI-assisted (recommended)** or **manual**. Both start by installing Emkeel once.
