@@ -24,7 +24,23 @@ def find_ticket_key(*sources: str) -> str | None:
     return None
 
 
+def _warn_if_stale_wiring() -> None:
+    """Non-blocking nudge on every PR: if the repo's generated files drift from the current
+    templates, tell the user to run `emkeel update`. Lives in a gate the CI already runs via
+    `pip install emkeel`, so it reaches every repo without the workflow YAML needing to change."""
+    try:
+        from pathlib import Path
+        from emkeel.update import wiring_drift
+        drift = wiring_drift(Path("."))
+        if drift:
+            print(f"::warning::Emkeel wiring is out of date ({', '.join(drift)}). "
+                  "Run `emkeel update` locally and commit to refresh it.")
+    except Exception:
+        pass  # a nudge must never break the gate
+
+
 def main() -> int:
+    _warn_if_stale_wiring()
     branch = os.environ.get("EMKEEL_BRANCH", "")
     pr_title = os.environ.get("EMKEEL_PR_TITLE", "")
     key = find_ticket_key(branch, pr_title)

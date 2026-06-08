@@ -34,3 +34,24 @@ def test_update_without_toml(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     assert main([]) == 1
     assert "emkeel setup" in capsys.readouterr().out
+
+
+def test_wiring_drift_clean_after_apply(tmp_path):
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert wiring_drift(tmp_path) == []          # fresh wiring matches current templates
+
+
+def test_wiring_drift_detects_stale_file(tmp_path):
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("an old, drifted contract")
+    assert "AGENTS.md" in wiring_drift(tmp_path)
+
+
+def test_wiring_drift_ignores_toml_stamp(tmp_path):
+    # emkeel.toml carries a version stamp that differs across versions — never counts as drift.
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "emkeel.toml").write_text('[github]\nrepo = "o/r"\n[emkeel]\ngenerated_with = "0.0.1"\n')
+    assert "emkeel.toml" not in wiring_drift(tmp_path)
