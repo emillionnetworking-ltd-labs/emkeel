@@ -14,6 +14,7 @@ def _git(args, cwd):
 
 def _init_repo(p, remote="git@github.com:acme/web.git"):
     _git(["init", "-q"], p)
+    _git(["symbolic-ref", "HEAD", "refs/heads/main"], p)  # deterministic default branch (CI may default to master)
     _git(["config", "user.email", "t@t.co"], p)
     _git(["config", "user.name", "test"], p)
     _git(["config", "commit.gpgsign", "false"], p)
