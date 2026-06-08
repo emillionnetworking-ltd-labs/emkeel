@@ -160,3 +160,10 @@ def test_main_existing_no_repo_cancel(tmp_path, monkeypatch, capsys):
     answers = iter(["2", "1", "c"])                    # en, existing, then cancel
     assert main(inp=lambda *_: next(answers)) == 0
     assert not (tmp_path / ".git").exists() and not (tmp_path / "emkeel.toml").exists()
+
+
+def test_next_steps_new_project_creates_repo():
+    a = Answers(lang="en", scenario="new", github_repo="acme/demo",
+                jira_url="https://x", jira_project="ACME")
+    ns = next_steps(a)
+    assert "gh repo create acme/demo" in ns and "--push" in ns   # new project: create+push first
