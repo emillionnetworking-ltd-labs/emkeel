@@ -21,6 +21,11 @@ import urllib.request
 from emkeel.gates.check_ticket_link import find_ticket_key
 
 
+def secrets_present() -> bool:
+    """True if all the Jira secrets needed for the transition are set."""
+    return all(os.environ.get(k) for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"))
+
+
 def pick_transition(transitions: list[dict], target: str) -> str | None:
     """Return the id of the transition whose name matches target (case-insensitive)."""
     for t in transitions:
@@ -88,6 +93,13 @@ def main(argv: list[str] | None = None) -> int:
     if not key:
         print("no ticket key (set EMKEEL_BRANCH/EMKEEL_PR_TITLE or pass KEY)", file=sys.stderr)
         return 1
+    if not secrets_present():
+        repo = os.environ.get("GITHUB_REPOSITORY", "OWNER/REPO")
+        print(f"::warning::Emkeel auto-close is OFF — Jira secrets not set. Add "
+              f"JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN at "
+              f"https://github.com/{repo}/settings/secrets/actions/new")
+        print(f"Skipping Jira transition for {key} (secrets missing).")
+        return 0  # non-blocking: don't fail the merge over a missing optional setup step
     ok, msg = transition_issue(key, ns.status)
     print(msg, file=(sys.stdout if ok else sys.stderr))
     return 0 if ok else 1

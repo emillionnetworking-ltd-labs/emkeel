@@ -63,3 +63,21 @@ def test_main_fails_without_key(monkeypatch):
     monkeypatch.delenv("EMKEEL_BRANCH", raising=False)
     monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
     assert J.main([]) == 1
+
+
+def test_secrets_present(monkeypatch):
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+    assert J.secrets_present() is False
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+    assert J.secrets_present() is True
+
+
+def test_main_warns_and_skips_without_secrets(monkeypatch, capsys):
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/SCRUM-9-x")
+    assert J.main([]) == 0                       # non-blocking: graceful skip
+    out = capsys.readouterr().out
+    assert "::warning::" in out and "secrets" in out.lower()
