@@ -6,71 +6,139 @@ human-approved merge → the ticket closes itself. `"done"` is a **computed fact
 passes), never a self-attested flag — enforcement lives server-side (GitHub Actions + branch
 protection), out of the agent's reach.
 
-> **Built for GitHub + Jira.** Emkeel uses GitHub (Actions CI, branch protection, the `gh` CLI)
-> and Jira (tickets + transitions). If your team isn't on both, Emkeel isn't for you (yet).
+> **Built for GitHub + Jira.** If your team isn't on both, Emkeel isn't for you (yet).
+
+## Prerequisites (set these up first)
+
+| Need | Where | Notes |
+| --- | --- | --- |
+| **GitHub account + a repo** | new repo → https://github.com/new | or use one you already have |
+| **GitHub CLI `gh`**, authenticated | https://cli.github.com → then run `gh auth login` | also sets up your `git push`/`pull` auth (SSH or HTTPS) — no separate SSH setup needed |
+| **Jira Cloud account** | https://www.atlassian.com/software/jira | your tickets live here |
+| **Jira API token** | https://id.atlassian.net/manage-profile/security/api-tokens | you paste it into a hidden prompt; Emkeel verifies it before saving |
+| **Python 3.11+** | https://www.python.org/downloads | Emkeel has zero other deps |
 
 ## 1. Install Emkeel (per platform)
 
-Zero-dependency Python CLI (needs **Python 3.11+**). **Only this step differs by OS** —
-everything after is identical.
+**Only this step differs by OS.**
 
 | Platform | Command |
 | --- | --- |
 | **Windows** | `py -m pip install --user pipx` → `py -m pipx ensurepath` → `pipx install emkeel` |
 | **macOS** | `brew install pipx` → `pipx install emkeel` |
-| **Linux** (with admin/sudo) | `sudo apt install pipx` → `pipx install emkeel` |
+| **Linux** (admin/sudo) | `sudo apt install pipx` → `pipx install emkeel` |
 | **Linux/server, no sudo** | `pip install --user --break-system-packages emkeel` *(safe — zero deps)* |
 
-Confirm with `emkeel version`. *(No pipx and can't install it? the last row works anywhere.)*
+Confirm: `emkeel version`.
 
-## 2. Set up your repo — step by step
+## 2. Set up your repo
 
-The wizard is **the same on every OS** and **deterministic (no AI)**.
+**First, open a terminal:**
+- **VS Code / Cursor:** menu **Terminal → New Terminal** (or `` Ctrl+` ``).
+- **Or your OS terminal:** Linux `Ctrl+Alt+T` · macOS *Terminal.app* · Windows *PowerShell*.
 
-1. **Open a terminal** in your project folder (an existing repo), or in a **new empty folder**
-   (a new project).
-2. **Run the wizard:**
-   ```bash
-   emkeel setup        # one-shot, without installing first:  pipx run emkeel setup
-   ```
-3. **Answer its questions** (in your language): existing repo or new project, then confirm your
-   **GitHub repo** and **Jira** (project + URL). Press **`c`** to cancel any menu.
-4. It **creates the branch + files + commit** and prints your remaining steps.
-5. **Do the connect steps it printed** — one-time, only you can:
-   - **Create a Jira API token** → https://id.atlassian.net/manage-profile/security/api-tokens
-   - **Add it as a GitHub secret** (`JIRA_TOKEN`, `JIRA_BASE_URL`, `JIRA_EMAIL`) in the repo's
-     **Settings → Secrets** *(🔒 never paste a token into a chat or commit it)*
-   - **Turn on branch protection** (require the `gates` check + a PR) in **Settings → Branches**
-6. **Check anytime:** `emkeel doctor` tells you what's still pending. **Undo:** `emkeel eject`.
+The wizard then guides you **in your language** (Spanish/English) and confirms before each step
+(`c` cancels). Pick your path:
 
-That's it — your repo is governed by Emkeel.
+### A · You already have a repo
+```bash
+cd my-project
+emkeel setup
+```
+1. Choose **language** (Español / English).
+2. Choose **"Existing repo"**.
+3. Confirm your **GitHub repo** + **Jira** (auto-detected — Enter to accept).
+4. Enter a **Jira key** for the branch → it creates `chore/<KEY>-adopt-emkeel` + Emkeel's files + commit.
+5. **"Connect now?" → yes:** branch protection (require the `gates` check + PRs) + **Jira secrets**
+   (email + token **verified before saving**, hidden).
+6. **"Finish the adopt?" → yes:** push → open the PR → **auto-merge when the gates pass** → sync your local.
 
-> Skipped a connect step? Emkeel tells you: `emkeel doctor` lists the gaps, and the CI itself
-> warns (e.g. a merge without the secrets logs *"auto-close is OFF — set secrets"*).
+✅ Your repo is governed (via a merged PR).
 
-## 3. Managing Emkeel
+### B · New project (from scratch)
+```bash
+mkdir my-app && cd my-app
+emkeel setup
+```
+1. Choose **language**.
+2. Choose **"New project"**.
+3. Type your **GitHub repo** (`owner/repo`) + **Jira** → it runs `git init` + Emkeel's files + commit.
+4. **"Connect now?" → yes:** it **creates the GitHub repo and pushes it** (`gh repo create`) +
+   branch protection + **Jira secrets** (verified).
 
-| You want to… | Command |
+✅ Your new repo is live on GitHub, governed.
+
+> **Check what's set up / still pending anytime:** `emkeel doctor`.
+> *Scripted instead?* `emkeel init` (non-interactive) · `emkeel connect` / `emkeel sync` standalone.
+
+## 3. Remove Emkeel
+
+**Order matters: un-govern the repo first, then uninstall the tool.** Open a terminal (see §2).
+
+### Step 1 — Un-govern a repo (`emkeel eject`)
+```bash
+cd my-project
+emkeel eject
+```
+1. Choose **language**.
+2. Answer **3 yes/no questions**: remove the **wiring**? *(the basics)* · also **`emkeel-governance/`**? ·
+   also the **GitHub side**? *(branch protection + secrets + push the removal)*.
+3. Review the **summary** → **confirm**.
+> *(Scripting/CI? `emkeel eject --help` shows the non-interactive flags.)*
+
+### Step 2 — Uninstall the tool
+```bash
+pipx uninstall emkeel
+```
+
+> **Uninstalling the tool ≠ un-governing your repos.** If you only `pipx uninstall emkeel`, your
+> repos' governance **keeps working** (their CI installs Emkeel from PyPI) — you just can't run the
+> local `emkeel` commands to change it. **To remove everything: `emkeel eject` in each repo first,
+> then `pipx uninstall emkeel`.**
+
+## 4. All commands (by use)
+
+**Set up / adopt**
+
+| Command | What it does |
 | --- | --- |
-| **See what's set up / pending** | `emkeel doctor` |
-| **Check version / updates** | `emkeel version` |
-| **Upgrade the tool** | `pipx upgrade emkeel` |
-| **Un-govern a repo** | `emkeel eject` *(dry-run; add `--yes` to apply; keeps `emkeel-governance/` unless `--purge`)* |
-| **Re-govern a repo** | `emkeel setup` again |
-| **Uninstall the tool** | `pipx uninstall emkeel` |
+| `emkeel setup` | interactive wizard (recommended — does everything) |
+| `emkeel connect` | just the GitHub side (branch protection + secrets), standalone |
+| `emkeel init .` | scaffold non-interactively (for scripts/CI) |
+| `emkeel onboard` | print the AI-assisted onboarding playbook |
 
-> **Use one install method** (don't mix pipx with `pip --user`). **Updates are safe:** your
-> repo's CI pins `emkeel~=0.MINOR.0` — auto patches/minors; a breaking major is opt-in.
+**Check / maintain**
+
+| Command | What it does |
+| --- | --- |
+| `emkeel doctor` | what's set up / what's pending (with fix links) |
+| `emkeel sync` | after a merge: checkout default + pull + drop the merged branch |
+| `emkeel review <KEY>` | per-criterion review template for a ticket |
+| `emkeel version` | installed version (+ flags a newer one on PyPI) |
+
+**Remove**
+
+| Command | What it does |
+| --- | --- |
+| `emkeel eject` *(alias `emkeel uninstall`)* | un-govern the repo — interactive, asks what to remove (`--help` for CI flags) |
+| `pipx uninstall emkeel` | remove the tool from your machine |
+
+**Tool**
+
+| Command | What it does |
+| --- | --- |
+| `pipx upgrade emkeel` | update Emkeel |
+
+> **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0` — auto patches/minors; a breaking major is opt-in.
 
 ## What you get
 
 - **Deterministic CI gates** (server-side, can't be skipped): every change links a ticket;
   features carry a spec with acceptance criteria; the full test suite runs on every PR.
-- **Auto-close** — merging a PR transitions the linked Jira ticket to Done.
+- **Auto-close** — merging a PR moves the linked Jira ticket to Done.
 - **AI review-assist** — a per-criterion verdict against the spec before you merge.
 - **Clean separation** — governance artifacts live in one `emkeel-governance/` folder, never shipped.
 
-*AI-assisted onboarding (`emkeel onboard`) exists; a richer AI experience is in progress.*
 See `docs/lifecycle.md` for the model.
 
 ---
