@@ -1,17 +1,22 @@
-# KEEL-57 — AGENTS.md routes Emkeel operations through `emkeel onboard`
+# KEEL-57 — emkeel update (refresh generated wiring to the installed version)
 
 ## Context
-When asked a bare `emkeel <cmd>`, an AI improvises instead of following the playbook (it hadn't been
-told to). The agent contract `AGENTS.md` (read by coding agents at session start) is the right place
-to route them: any Emkeel task → `emkeel onboard` first. Best-effort (gates remain the hard guarantee).
+New adoptions get the latest templates automatically, but an already-adopted repo is frozen at its
+adoption version: `pipx upgrade` updates the tool, not the repo's already-written files (AGENTS.md,
+CLAUDE.md, workflows). So template/playbook improvements never reach existing repos — and editing
+those files by hand is exactly the user-error we want to avoid.
 
 ## Plan
-- `src/emkeel/init.py` — the generated `AGENTS.md` gains a "Managing Emkeel itself" rule: for any
-  Emkeel task, run `emkeel onboard` first and follow it (single entry point; don't improvise
-  subcommands). `tests/test_init.py`. Bump 0.1.42.
+- `src/emkeel/update.py` — `emkeel update`: read `emkeel.toml` → `apply(..., force=True)` to
+  re-write the generated wiring with the current templates (values preserved; `emkeel-governance/`
+  and the user's `.gitignore` untouched). `src/emkeel/cli.py` dispatch `update`. `tests/test_update.py`.
+  Bump 0.1.43.
 
 ## Acceptance Criteria
-- The generated AGENTS.md instructs the agent to route Emkeel operations through `emkeel onboard`.
+- `emkeel update` reads emkeel.toml and refreshes the generated wiring to the installed version,
+  preserving the user's values and emkeel-governance/ artifacts.
+- No emkeel.toml → tells the user to run `emkeel setup` first.
 
 ## Anti-regression
-- Test asserts the generated AGENTS.md mentions `emkeel onboard` as the single entry point.
+- Tests: load_cfg reads emkeel.toml; update refreshes a stale AGENTS.md (gains the onboard rule) and
+  leaves emkeel-governance/ artifacts untouched; missing toml → exit 1 with guidance.
