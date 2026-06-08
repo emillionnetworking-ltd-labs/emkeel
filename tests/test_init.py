@@ -103,3 +103,8 @@ def test_main_smoke(tmp_path, capsys):
     assert "emkeel init [applied]" in out and "NEXT — connect Emkeel" in out
     assert "https://github.com/o/r/settings/secrets/actions/new" in out  # link-rich
     assert (tmp_path / "emkeel.toml").is_file()
+
+
+def test_toml_stamps_generated_with(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert "generated_with" in (tmp_path / "emkeel.toml").read_text()

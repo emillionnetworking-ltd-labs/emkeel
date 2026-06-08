@@ -62,3 +62,24 @@ def test_gates_required_via_ruleset():
 
 def test_gates_required_neither():
     assert _gates_required("a/b", "main", run=_fake_run(1, "{}", 0, "[]")) is False
+
+
+def test_stale_wiring_nudges_update():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "installed": "0.1.46", "wiring_version": "0.1.40"})
+    assert _has(r, "emkeel update") and _has(r, "older")
+
+
+def test_current_wiring_no_nudge():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "installed": "0.1.46", "wiring_version": "0.1.46"})
+    assert not _has(r, "emkeel update")
+
+
+def test_older_helper():
+    from emkeel.doctor import _older
+    assert _older("0.1.40", "0.1.46") is True
+    assert _older("0.1.46", "0.1.46") is False
+    assert _older("0.2.0", "0.1.46") is False
