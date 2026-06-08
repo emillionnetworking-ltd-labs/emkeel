@@ -1,9 +1,9 @@
 """emkeel setup — interactive, deterministic setup wizard (no AI).
 
 Run `emkeel setup` (or one-shot: `pipx run emkeel setup`). It asks a few questions in your
-language, then does the local setup (branch + scaffold + commit) and prints clear, guided
-next steps. The work is plain Python + git — no AI deciding anything, so the wizard can't be
-"talked out of" the steps.
+language, then does the local setup (branch + scaffold + commit) and prints clear next steps.
+Plain Python + git — no AI deciding anything, so the wizard can't be "talked out of" its steps.
+Already set up? It detects `emkeel.toml` and refuses to re-run (use `emkeel eject` first).
 """
 
 from __future__ import annotations
@@ -17,16 +17,13 @@ from pathlib import Path
 from emkeel.init import Config, apply, connection_checklist
 
 KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
+CANCEL_WORDS = {"c", "q", "cancel", "cancelar", "salir", "quit"}
 
 # --- minimal i18n (es / en) ------------------------------------------------
 T: dict[str, dict[str, str]] = {
-    "title":     {"es": "Emkeel · setup", "en": "Emkeel · setup"},
     "scenario":  {"es": "¿Repo existente o proyecto nuevo?", "en": "Existing repo or new project?"},
     "existing":  {"es": "Repo existente", "en": "Existing repo"},
     "new":       {"es": "Proyecto nuevo", "en": "New project"},
-    "mode":      {"es": "¿Prueba o adopción real?", "en": "Trial run or real adoption?"},
-    "trial":     {"es": "Prueba (reversible)", "en": "Trial (reversible)"},
-    "real":      {"es": "Adopción real", "en": "Real adoption"},
     "detected":  {"es": "Datos (Enter = aceptar, o escribe para cambiar):",
                   "en": "Details (Enter = accept, or type to change):"},
     "ghrepo":    {"es": "Repo de GitHub (owner/repo)", "en": "GitHub repo (owner/repo)"},
@@ -43,10 +40,21 @@ T: dict[str, dict[str, str]] = {
     "done":      {"es": "Listo. Tu repo está preparado.", "en": "Done. Your repo is scaffolded."},
     "nextyou":   {"es": "Ahora tú (solo tú puedes):", "en": "Now you (only you can):"},
     "n_push":    {"es": "Subir y abrir un PR:", "en": "Push and open a PR:"},
-    "trialnote": {"es": "Prueba: NO configures secretos. Para deshacer todo:",
-                  "en": "Trial: do NOT set secrets. To undo everything:"},
-    "secrets":   {"es": "Luego, los enlaces de conexión (token Jira → GitHub Secrets, 🔒 nunca en texto plano):",
-                  "en": "Then the connect links (Jira token → GitHub Secrets, 🔒 never in plain text):"},
+    "secrets":   {"es": "Conexión (token Jira → GitHub Secrets, 🔒 nunca en texto plano):",
+                  "en": "Connect (Jira token → GitHub Secrets, 🔒 never in plain text):"},
+    "undo":      {"es": "Para deshacer todo:  emkeel eject", "en": "To undo everything:  emkeel eject"},
+    "already":   {"es": "Emkeel ya está configurado en este repo (existe emkeel.toml).\n  "
+                        "Para reconfigurar, quítalo primero:  emkeel eject",
+                  "en": "Emkeel is already set up here (emkeel.toml exists).\n  "
+                        "To reconfigure, remove it first:  emkeel eject"},
+    "warn_isrepo_q": {"es": "⚠ Detecté un repo git con historial aquí. ¿Cómo lo configuro?",
+                      "en": "⚠ This is already a git repo with history. How should I set it up?"},
+    "opt_existing":  {"es": "Repo existente (rama + PR) — recomendado",
+                      "en": "Existing repo (branch + PR) — recommended"},
+    "opt_new_risky": {"es": "Proyecto nuevo (commiteará a tu rama actual)",
+                      "en": "New project (will commit to your current branch)"},
+    "warn_norepo":   {"es": "⚠ Aún no hay repo git con commits aquí → lo configuro como proyecto nuevo.",
+                      "en": "⚠ No git repo with commits here yet → setting it up as a new project."},
 }
 
 
@@ -58,11 +66,10 @@ def t(key: str, lang: str) -> str:
 class Answers:
     lang: str = "en"
     scenario: str = "existing"   # "existing" | "new"
-    mode: str = "trial"          # "trial" | "real"
     github_repo: str = ""
     jira_url: str = ""
     jira_project: str = ""
-    jira_key: str = ""           # only used for the branch (existing repo)
+    jira_key: str = ""           # branch key (existing repo)
 
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -70,8 +77,7 @@ def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
 
 
 def derive_defaults(cwd: Path) -> dict[str, str]:
-    """Best-effort defaults from the repo: GitHub repo (remote), Jira project (commit keys),
-    Jira URL (grep tracked files). Empty strings when not found."""
+    """Best-effort defaults from the repo. Empty strings when not found / not a repo."""
     d = {"github_repo": "", "jira_url": "", "jira_project": ""}
     r = _run(["git", "remote", "get-url", "origin"], cwd)
     if r.returncode == 0:
@@ -87,6 +93,11 @@ def derive_defaults(cwd: Path) -> dict[str, str]:
     if g.returncode == 0 and g.stdout.strip():
         d["jira_url"] = sorted(set(g.stdout.split()))[0]
     return d
+
+
+def is_existing_repo(target: Path) -> bool:
+    """True if `target` is already a git repo with at least one commit."""
+    return _run(["git", "rev-parse", "--verify", "HEAD"], target).returncode == 0
 
 
 def branch_name(key: str) -> str:
@@ -135,26 +146,27 @@ def next_steps(a: Answers) -> str:
     lines = ["", t("nextyou", a.lang)]
     if a.scenario == "existing":
         lines.append(f"  • {t('n_push', a.lang)}  git push -u origin HEAD  →  PR")
-    if a.mode == "trial":
-        undo = f"emkeel eject --purge --yes"
-        if a.scenario == "existing":
-            undo += f" ; git checkout - ; git branch -D {branch_name(a.jira_key)}"
-        lines.append(f"  • {t('trialnote', a.lang)} {undo}")
-    else:
-        lines.append("")
-        lines.append("  " + t("secrets", a.lang))
-        lines.append(connection_checklist(cfg))
+    lines.append("")
+    lines.append("  " + t("secrets", a.lang))
+    lines.append(connection_checklist(cfg))
+    lines.append(f"  {t('undo', a.lang)}")
     return "\n".join(lines)
 
 
 # --- interactive layer ----------------------------------------------------
 
-def _choice(prompt: str, options: list[tuple[str, str]], inp=input) -> str:
+def _choice(prompt: str, options: list[tuple[str, str]], inp=input) -> str | None:
+    """Numbered choice. Enter → first option (default). 'c'/'q' → None (cancel)."""
     while True:
         print(prompt)
         for i, (_, label) in enumerate(options, 1):
-            print(f"  [{i}] {label}")
-        raw = inp("  > ").strip()
+            print(f"  [{i}] {label}" + ("  (Enter)" if i == 1 else ""))
+        print("  [c] Cancelar / Cancel")
+        raw = inp("  > ").strip().lower()
+        if raw == "":
+            return options[0][0]
+        if raw in CANCEL_WORDS:
+            return None
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1][0]
 
@@ -164,31 +176,56 @@ def _field(label: str, default: str, inp=input) -> str:
     return inp(shown).strip() or default
 
 
+def _cancel(lang: str = "en") -> int:
+    print("  " + t("cancelled", lang))
+    return 0
+
+
 def main(argv: list[str] | None = None, inp=input) -> int:
-    print(f"\n  {T['title']['en']}\n  " + "─" * 14)
+    target = Path(".")
+    if (target / "emkeel.toml").is_file():       # already set up → don't re-run
+        print("\n  " + t("already", "es"))
+        print("  " + t("already", "en"))
+        return 0
+
+    print("\n  Emkeel · setup\n  " + "─" * 14)
     lang = _choice("  Idioma / Language:", [("es", "Español"), ("en", "English")], inp)
+    if lang is None:
+        return _cancel("en")
     a = Answers(lang=lang)
+
     a.scenario = _choice("\n  " + t("scenario", lang),
                          [("existing", t("existing", lang)), ("new", t("new", lang))], inp)
-    a.mode = _choice("\n  " + t("mode", lang),
-                     [("trial", t("trial", lang)), ("real", t("real", lang))], inp)
+    if a.scenario is None:
+        return _cancel(lang)
 
-    target = Path(".")
+    # Cross-check the answer against reality (don't silently trust a wrong answer):
+    # "new" inside a repo with history would commit straight to your branch — tell the user
+    # and let them choose (existing is the safe default).
+    real = is_existing_repo(target)
+    if a.scenario == "new" and real:
+        print("\n  " + t("warn_isrepo_q", lang))
+        choice = _choice("", [("existing", t("opt_existing", lang)), ("new", t("opt_new_risky", lang))], inp)
+        if choice is None:
+            return _cancel(lang)
+        a.scenario = choice
+    elif a.scenario == "existing" and not real:
+        print("\n  " + t("warn_norepo", lang))   # no repo here → only "new" makes sense
+        a.scenario = "new"
+
     d = derive_defaults(target)
     print("\n  " + t("detected", lang))
     a.github_repo = _field(t("ghrepo", lang), d["github_repo"], inp)
     a.jira_url = _field(t("jiraurl", lang), d["jira_url"], inp)
     a.jira_project = _field(t("jiraproj", lang), d["jira_project"], inp)
     if a.scenario == "existing":
-        default_key = "SCRUM-9999" if a.mode == "trial" else ""
-        a.jira_key = _field(t("jirakey", lang), default_key, inp)
+        a.jira_key = _field(t("jirakey", lang), f"{a.jira_project}-1" if a.jira_project else "", inp)
 
     print()
     for line in plan_lines(a):
         print("  " + line)
     if inp("\n  " + t("continue", lang)).strip().lower() not in ("s", "y", "si", "yes"):
-        print("  " + t("cancelled", lang))
-        return 0
+        return _cancel(lang)
 
     print("\n  " + t("working", lang))
     try:
