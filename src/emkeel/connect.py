@@ -84,6 +84,31 @@ def do_secret(repo: str, name: str, value: str, run=_run):
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
+def _jira_fetch(base_url: str, email: str, token: str) -> tuple[bool, str]:
+    import base64 as _b64
+    import json as _json
+    import urllib.error
+    import urllib.request
+    auth = _b64.b64encode(f"{email}:{token}".encode()).decode()
+    req = urllib.request.Request(base_url.rstrip("/") + "/rest/api/3/myself")
+    req.add_header("Authorization", "Basic " + auth)
+    req.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            d = _json.loads(r.read().decode())
+            return True, (d.get("displayName") or d.get("emailAddress") or "ok")
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP {e.code}"
+    except Exception as e:  # network/DNS/timeout
+        return False, str(e)[:60]
+
+
+def verify_jira(base_url: str, email: str, token: str, fetch=None) -> tuple[bool, str]:
+    """Confirm the email+token actually authenticate to Jira (GET /myself), so we never store
+    silently-wrong credentials. Returns (ok, detail). `_jira_fetch` is resolved at call time."""
+    return (fetch or _jira_fetch)(base_url, email, token)
+
+
 def current_branch(run=_run) -> str:
     r = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
     return r.stdout.strip() if r.returncode == 0 else ""
@@ -161,11 +186,22 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
     # 3) Secrets — token via hidden prompt; never in chat or logs
     if _yes(inp("  Set the Jira secrets now? (you'll paste the token, hidden) [Y/n] ")):
         print(f"  Create the token first if you haven't: {TOKEN_LINK}")
-        email = inp("  Atlassian email: ").strip()
-        token = getpass("  Jira API token (hidden): ").strip()
-        for name, val in (("JIRA_BASE_URL", cfg.base_url), ("JIRA_EMAIL", email), ("JIRA_TOKEN", token)):
-            ok, msg = do_secret(repo, name, val, run)
-            print(f"  {'✓' if ok else '✗'} {name}" + ("" if ok else f": {msg}"))
+        while True:
+            email = inp("  Atlassian email: ").strip()
+            token = getpass("  Jira API token (hidden): ").strip()
+            ok, detail = verify_jira(cfg.base_url, email, token)
+            if ok:
+                print(f"  ✓ Jira credentials verified ({detail})")
+                break
+            print(f"  ✗ Jira login failed ({detail}) — not saving. Check the email/token.")
+            if not _yes(inp("  Try again? [Y/n] ")):
+                print("  Skipped secrets — set them later with `emkeel connect` (or in repo Settings).")
+                email = token = ""
+                break
+        if email and token:
+            for name, val in (("JIRA_BASE_URL", cfg.base_url), ("JIRA_EMAIL", email), ("JIRA_TOKEN", token)):
+                ok, msg = do_secret(repo, name, val, run)
+                print(f"  {'✓' if ok else '✗'} {name}" + ("" if ok else f": {msg}"))
 
     # 4) Finish the adopt — push the branch, open a PR, auto-merge when gates pass.
     #    Scope: the emkeel ADOPTION PR only (you're on its branch). Normal changes stay human-merged.
