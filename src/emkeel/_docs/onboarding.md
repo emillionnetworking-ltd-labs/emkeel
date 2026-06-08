@@ -47,11 +47,11 @@ Run `emkeel doctor` → confirm **"All set"**. The PR merges when the `gates` pa
 enabled); merging moves the linked Jira ticket to Done.
 
 ## Removing Emkeel (if asked: eject + uninstall)
-Same rules — transcribe, be brief, in order:
-1. Ask what to remove (translated): the **wiring** (the basics) · also **`emkeel-governance/`**? ·
-   also the **GitHub side** (branch protection + secrets + push the removal)?
-2. Run the deterministic command (the push stays visible): `emkeel eject --yes` plus
-   **`--purge`** (governance), **`--remote`** (GitHub side), or **`--all`** (everything).
+Same rules — **ask the user's language first**, transcribe, be brief, in order:
+1. Run `emkeel eject --json` → present its **canonical scopes, translated** (Default · Purge · All) —
+   don't invent your own.
+2. Run the chosen scope (the push stays visible): `emkeel eject` + its flags
+   (`--yes` · `--purge` · `--remote` · `--all`).
 3. To remove the tool from the machine too — **confirm first** (after this, `emkeel` is gone):
    `pipx uninstall emkeel`.
 > **Uninstalling the tool ≠ un-governing the repo** — always `emkeel eject` first, then uninstall.
