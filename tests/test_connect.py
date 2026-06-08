@@ -2,7 +2,9 @@
 
 from types import SimpleNamespace
 
-from emkeel.connect import gh_ok, load_config, main, protection_body, repo_exists
+from emkeel.connect import (
+    current_branch, do_push, gh_ok, load_config, main, protection_body, repo_exists,
+)
 
 
 def _ok(stdout="ok"):
@@ -65,7 +67,7 @@ def test_existing_repo_flow(tmp_path, monkeypatch, capsys):
         ran.append(" ".join(args))
         return _ok()
 
-    answers = iter(["y", "y", "me@x.co"])                # protect? secrets? email
+    answers = iter(["y", "y", "me@x.co", "n"])           # protect? secrets? email; finish-adopt? (no)
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run) == 0
     joined = "\n".join(ran)
     assert "repo view a/b" in joined                      # checked existence (existing → skip create)
@@ -84,6 +86,57 @@ def test_new_repo_creates_and_pushes(tmp_path, monkeypatch):
         ran.append(joined)
         return _fail() if "repo view" in joined else _ok()   # not on GitHub yet
 
-    answers = iter(["y", "y", "n"])                       # create+push? protect? secrets?(no)
+    answers = iter(["y", "y", "n", "n"])                  # create+push? protect? secrets?(no) finish-adopt?(no)
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run) == 0
     assert any("repo create a/b" in r and "--push" in r for r in ran)   # created + pushed
+
+
+def test_current_branch():
+    assert current_branch(run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="feat/x\n", stderr="")) == "feat/x"
+
+
+def test_do_push_timeout():
+    import subprocess
+
+    def run(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="git push", timeout=180)
+
+    ok, msg = do_push(run=run)
+    assert ok is False and "timed out" in msg
+
+
+def test_finish_adopt_pushes_pr_and_automerges(tmp_path, monkeypatch):
+    _toml(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    ran = []
+
+    def run(args, stdin=None, timeout=None):
+        joined = " ".join(args)
+        ran.append(joined)
+        if "rev-parse" in joined:
+            return SimpleNamespace(returncode=0, stdout="chore/SCRUM-1-adopt-emkeel", stderr="")
+        return _ok()
+
+    answers = iter(["n", "n", "y"])                       # protect?(no) secrets?(no) finish-adopt?(yes)
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run) == 0
+    joined = "\n".join(ran)
+    assert "git push -u origin HEAD" in joined
+    assert "pr create --fill" in joined
+    assert "pr merge --auto --squash" in joined          # native auto-merge (waits for gates)
+
+
+def test_finish_adopt_skipped_on_default_branch(tmp_path, monkeypatch):
+    _toml(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    ran = []
+
+    def run(args, stdin=None, timeout=None):
+        joined = " ".join(args)
+        ran.append(joined)
+        if "rev-parse" in joined:
+            return SimpleNamespace(returncode=0, stdout="main", stderr="")   # on the default branch
+        return _ok()
+
+    answers = iter(["n", "n"])                            # protect?(no) secrets?(no) — NO finish-adopt prompt
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run) == 0
+    assert not any("pr merge" in r for r in ran)          # no auto-merge offered on the default branch
