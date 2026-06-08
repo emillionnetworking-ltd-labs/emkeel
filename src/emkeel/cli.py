@@ -1,7 +1,8 @@
 """emkeel command-line interface.
 
 Subcommands:
-  emkeel init [opts]     scaffold a repo for Emkeel governance
+  emkeel setup           interactive setup wizard (no AI — asks a few questions, does the work)
+  emkeel init [opts]     scaffold a repo for Emkeel governance (non-interactive, for scripts/AI)
   emkeel onboard         print the AI-assisted onboarding playbook (paste it to your agent)
   emkeel review <KEY>    print a per-criterion review template for a ticket
   emkeel eject           reverse `emkeel init` in this repo (alias: uninstall; dry-run unless --yes)
@@ -13,7 +14,7 @@ from __future__ import annotations
 import sys
 from importlib import resources
 
-_USAGE = "usage: emkeel <init|onboard|review|eject|version> [args]   (try: emkeel onboard)"
+_USAGE = "usage: emkeel <setup|init|onboard|review|eject|version> [args]   (try: emkeel setup)"
 
 
 def _onboard() -> int:
@@ -33,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
         print(_USAGE)
         return 0
     cmd, rest = argv[0], argv[1:]
+    if cmd == "setup":
+        from emkeel.wizard import main as wizard_main
+        return wizard_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)
