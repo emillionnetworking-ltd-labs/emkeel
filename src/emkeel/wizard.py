@@ -44,6 +44,8 @@ T: dict[str, dict[str, str]] = {
     "secrets":   {"es": "Conexión (token Jira → GitHub Secrets, 🔒 nunca en texto plano):",
                   "en": "Connect (Jira token → GitHub Secrets, 🔒 never in plain text):"},
     "undo":      {"es": "Para deshacer todo:  emkeel eject", "en": "To undo everything:  emkeel eject"},
+    "connect_q": {"es": "¿Conectar ahora con GitHub (branch protection + secrets)? [s/N] ",
+                  "en": "Connect to GitHub now (branch protection + secrets)? [y/N] "},
     "already":   {"es": "Emkeel ya está configurado en este repo (existe emkeel.toml).\n  "
                         "Para reconfigurar, quítalo primero:  emkeel eject",
                   "en": "Emkeel is already set up here (emkeel.toml exists).\n  "
@@ -246,7 +248,17 @@ def main(argv: list[str] | None = None, inp=input) -> int:
         return 1
     print("\n  " + t("done", lang))
     print(next_steps(a))
+    _maybe_connect(lang, inp)
     return 0
+
+
+def _maybe_connect(lang: str, inp) -> None:
+    """Guide the GitHub connection (branch protection + secrets) right here, if gh is available."""
+    from emkeel import connect
+    if not connect.gh_ok():
+        return
+    if inp("\n  " + t("connect_q", lang)).strip().lower() in ("s", "y", "si", "yes"):
+        connect.main([], inp=inp)
 
 
 if __name__ == "__main__":
