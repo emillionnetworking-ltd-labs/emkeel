@@ -36,3 +36,29 @@ def test_pending_lists_gaps_with_links():
     assert _has(r, "Jira secrets") and _has(r, "a/b/settings/secrets/actions/new")
     assert _has(r, "gates") and _has(r, "a/b/settings/branches")
     assert _has(r, "pending")
+
+
+from types import SimpleNamespace
+from emkeel.doctor import _gates_required
+
+
+def _fake_run(classic_rc, classic_out, rules_rc, rules_out):
+    def run(args):
+        joined = " ".join(args)
+        if "/protection" in joined:
+            return SimpleNamespace(returncode=classic_rc, stdout=classic_out)
+        return SimpleNamespace(returncode=rules_rc, stdout=rules_out)
+    return run
+
+
+def test_gates_required_via_classic():
+    assert _gates_required("a/b", "main", run=_fake_run(0, '["gates"]', 0, "[]")) is True
+
+
+def test_gates_required_via_ruleset():
+    # classic protection returns 404 (rc!=0); the ruleset endpoint has 'gates'
+    assert _gates_required("a/b", "main", run=_fake_run(1, '{"message":"Branch not protected"}', 0, '["gates"]')) is True
+
+
+def test_gates_required_neither():
+    assert _gates_required("a/b", "main", run=_fake_run(1, "{}", 0, "[]")) is False
