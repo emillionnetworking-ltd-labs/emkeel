@@ -30,6 +30,9 @@ T: dict[str, dict[str, str]] = {
     "jiraurl":   {"es": "URL de Jira", "en": "Jira URL"},
     "jiraproj":  {"es": "Proyecto Jira (clave)", "en": "Jira project (key)"},
     "jirakey":   {"es": "Clave Jira para la rama (ej. SCRUM-123)", "en": "Jira key for the branch (e.g. SCRUM-123)"},
+    "branch_taken": {"es": "⚠ La rama {b} ya existe. ¿Qué hago?", "en": "⚠ Branch {b} already exists. What should I do?"},
+    "opt_newkey":   {"es": "Usar otra clave Jira", "en": "Use a different Jira key"},
+    "opt_reuse":    {"es": "Usar la rama existente", "en": "Use the existing branch"},
     "plan":      {"es": "Voy a hacer (local, no toca tu main):", "en": "I'll do (local, won't touch your main):"},
     "p_branch":  {"es": "crear la rama", "en": "create branch"},
     "p_init":    {"es": "git init (carpeta nueva)", "en": "git init (new folder)"},
@@ -38,6 +41,7 @@ T: dict[str, dict[str, str]] = {
     "cancelled": {"es": "Cancelado — no se cambió nada.", "en": "Cancelled — nothing changed."},
     "working":   {"es": "Trabajando…", "en": "Working…"},
     "done":      {"es": "Listo. Tu repo está preparado.", "en": "Done. Your repo is scaffolded."},
+    "retry_hint":{"es": "Arréglalo y vuelve a correr:  emkeel setup", "en": "Fix it and run again:  emkeel setup"},
     "nextyou":   {"es": "Ahora tú (solo tú puedes):", "en": "Now you (only you can):"},
     "n_push":    {"es": "Subir y abrir un PR:", "en": "Push and open a PR:"},
     "n_create":  {"es": "Crear el repo en GitHub y subir:", "en": "Create the GitHub repo and push:"},
@@ -75,6 +79,7 @@ class Answers:
     jira_url: str = ""
     jira_project: str = ""
     jira_key: str = ""           # branch key (existing repo)
+    reuse_branch: bool = False   # checkout an existing branch instead of creating it
 
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -109,6 +114,10 @@ def branch_name(key: str) -> str:
     return f"chore/{key}-adopt-emkeel"
 
 
+def branch_exists(target: Path, name: str) -> bool:
+    return _run(["git", "rev-parse", "--verify", f"refs/heads/{name}"], target).returncode == 0
+
+
 def plan_lines(a: Answers) -> list[str]:
     lines = [t("plan", a.lang)]
     if a.scenario == "new":
@@ -131,9 +140,10 @@ def run_setup(target: Path, a: Answers) -> list[str]:
             out.append("✓ git init")
     else:
         br = branch_name(a.jira_key)
-        r = _run(["git", "checkout", "-b", br], target)
+        args = ["git", "checkout", br] if a.reuse_branch else ["git", "checkout", "-b", br]
+        r = _run(args, target)
         if r.returncode != 0:
-            raise RuntimeError(f"git checkout -b {br}: {r.stderr.strip()}")
+            raise RuntimeError(f"{' '.join(args)}: {r.stderr.strip()}")
         out.append(f"✓ {br}")
     actions = apply(target, cfg, force=False, dry_run=False)
     out.append("✓ files")
@@ -232,6 +242,16 @@ def main(argv: list[str] | None = None, inp=input) -> int:
     a.jira_project = _field(t("jiraproj", lang), d["jira_project"], inp)
     if a.scenario == "existing":
         a.jira_key = _field(t("jirakey", lang), f"{a.jira_project}-1" if a.jira_project else "", inp)
+        # An existing branch must NOT crash the wizard — let the user choose.
+        while branch_exists(target, branch_name(a.jira_key)):
+            print("\n  " + t("branch_taken", lang).format(b=branch_name(a.jira_key)))
+            pick = _choice("", [("newkey", t("opt_newkey", lang)), ("reuse", t("opt_reuse", lang))], inp)
+            if pick is None:
+                return _cancel(lang)
+            if pick == "reuse":
+                a.reuse_branch = True
+                break
+            a.jira_key = _field(t("jirakey", lang), a.jira_key, inp)
 
     print()
     for line in plan_lines(a):
@@ -245,6 +265,7 @@ def main(argv: list[str] | None = None, inp=input) -> int:
             print("  " + line)
     except RuntimeError as e:
         print(f"  ✗ {e}")
+        print("  " + t("retry_hint", lang))
         return 1
     print("\n  " + t("done", lang))
     print(next_steps(a))

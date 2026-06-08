@@ -199,3 +199,24 @@ def test_main_connect_offer_declined(tmp_path, monkeypatch):
     answers = iter(["2", "1", "", "", "", "SCRUM-9999", "y", "n"])   # decline connect
     assert main(inp=lambda *_: next(answers)) == 0
     assert "yes" not in called                   # connect NOT invoked
+
+
+def test_main_branch_exists_offers_newkey(tmp_path, monkeypatch):
+    # Branch already exists → wizard must NOT crash; offer a different key.
+    _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _git(["branch", "chore/SCRUM-1-adopt-emkeel"], tmp_path)
+    # lang,scenario,repo⏎,url⏎,proj⏎,key(⏎=SCRUM-1 taken),choice=newkey(1),key2=SCRUM-2,continue
+    answers = iter(["2", "1", "", "", "", "", "1", "SCRUM-2", "y"])
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert _branch(tmp_path) == "chore/SCRUM-2-adopt-emkeel"   # recovered, didn't exit
+
+
+def test_main_branch_exists_offers_reuse(tmp_path, monkeypatch):
+    _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _git(["branch", "chore/SCRUM-1-adopt-emkeel"], tmp_path)
+    # ...key(⏎=SCRUM-1 taken),choice=reuse(2),continue
+    answers = iter(["2", "1", "", "", "", "", "2", "y"])
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert _branch(tmp_path) == "chore/SCRUM-1-adopt-emkeel"   # reused the existing branch

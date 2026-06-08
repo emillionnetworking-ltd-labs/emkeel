@@ -138,6 +138,8 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
             ok, msg = do_create_push(repo, run)
             print("  ✓ repo created + pushed" if ok else f"  ✗ {msg}")
             if not ok:
+                print(f"     Create it manually:  gh repo create {repo} --private --source=. --push")
+                print("     Then re-run:  emkeel connect")
                 return 1
 
     # 2) Branch protection — require the gates check + PRs

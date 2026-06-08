@@ -115,9 +115,13 @@ def _ask(inp, prompt: str, default: bool) -> bool:
 
 def _do_eject(target: Path, purge: bool, remote: bool) -> int:
     actions = apply_uninstall(target, purge, dry_run=False)
-    print(f"\nemkeel eject [removed] -> {target}")
-    for a in actions:
-        print(f"  {a.kind:11} {a.path}")
+    removed = [a for a in actions if a.kind in ("remove", "remove-dir")]
+    print(f"\nemkeel eject -> {target}")
+    if removed:
+        for a in removed:
+            print(f"  removed   {a.path}")
+    else:
+        print("  (no local Emkeel files to remove — already clean)")
     if not purge and (target / GOVERNANCE_DIR).is_dir():
         print(f"\nKept {GOVERNANCE_DIR}/ (your history).")
     if remote:
