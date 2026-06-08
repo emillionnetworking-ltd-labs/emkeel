@@ -24,8 +24,8 @@ from pathlib import Path
 TOKEN_LINK = "https://id.atlassian.net/manage-profile/security/api-tokens"
 
 
-def _run(args: list[str], stdin: str | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, input=stdin)
+def _run(args: list[str], stdin: str | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(args, capture_output=True, text=True, input=stdin, timeout=timeout)
 
 
 def _yes(s: str) -> bool:
@@ -81,6 +81,31 @@ def do_secret(repo: str, name: str, value: str, run=_run):
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
+def current_branch(run=_run) -> str:
+    r = run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def do_push(run=_run):
+    """Push HEAD with a timeout — a pre-push hook can hang, so we bail to a manual fallback."""
+    try:
+        r = run(["git", "push", "-u", "origin", "HEAD"], timeout=180)
+    except subprocess.TimeoutExpired:
+        return False, "timed out (a pre-push hook may be hanging)"
+    return r.returncode == 0, (r.stderr or r.stdout).strip()
+
+
+def do_pr_create(run=_run):
+    r = run(["gh", "pr", "create", "--fill"])
+    return r.returncode == 0, (r.stdout or r.stderr).strip()
+
+
+def do_auto_merge(run=_run):
+    """Enable GitHub's native auto-merge: merges WHEN required checks pass (gates) + approvals met."""
+    r = run(["gh", "pr", "merge", "--auto", "--squash"])
+    return r.returncode == 0, (r.stderr or r.stdout).strip()
+
+
 def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
     ap = argparse.ArgumentParser(prog="emkeel connect", description="Automate the GitHub side via gh.")
     ap.add_argument("--branch", default="main")
@@ -99,6 +124,7 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
         print(f"    • gh repo create {repo} --private --source=. --push   (only if not on GitHub yet)")
         print(f"    • gh api -X PUT repos/{repo}/branches/{branch}/protection   (require 'gates' + PR)")
         print(f"    • gh secret set JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN --repo {repo}")
+        print(f"    • (adopt branch) git push -u origin HEAD ; gh pr create --fill ; gh pr merge --auto --squash")
         print(f"  Manual (only you): create the Jira token → {TOKEN_LINK}")
         return 0
 
@@ -127,6 +153,25 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
         for name, val in (("JIRA_BASE_URL", cfg.base_url), ("JIRA_EMAIL", email), ("JIRA_TOKEN", token)):
             ok, msg = do_secret(repo, name, val, run)
             print(f"  {'✓' if ok else '✗'} {name}" + ("" if ok else f": {msg}"))
+
+    # 4) Finish the adopt — push the branch, open a PR, auto-merge when gates pass.
+    #    Scope: the emkeel ADOPTION PR only (you're on its branch). Normal changes stay human-merged.
+    cur = current_branch(run)
+    if cur and cur != branch:
+        ans = inp(f"  Finish the adopt — push '{cur}', open a PR and auto-merge when gates pass? [y/N] ").strip().lower()
+        if ans in ("y", "yes", "s", "si"):
+            ok, msg = do_push(run)
+            if not ok:
+                print(f"  ✗ push: {msg}")
+                print("     Do it manually:  git push -u origin HEAD  &&  gh pr create --fill  &&  gh pr merge --auto --squash")
+            else:
+                print("  ✓ pushed")
+                okp, out = do_pr_create(run)
+                print(f"  ✓ PR opened — {out}" if okp else f"  ✗ gh pr create: {out}")
+                if okp:
+                    okm, outm = do_auto_merge(run)
+                    print("  ✓ auto-merge on — merges when the gates pass" if okm
+                          else f"  ⚠ auto-merge: {outm}\n     (gates failed? fix + push again; or merge it yourself once green)")
 
     print("\n  Done. Check with: emkeel doctor")
     return 0
