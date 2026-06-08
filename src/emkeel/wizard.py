@@ -47,10 +47,14 @@ T: dict[str, dict[str, str]] = {
                         "Para reconfigurar, quítalo primero:  emkeel eject",
                   "en": "Emkeel is already set up here (emkeel.toml exists).\n  "
                         "To reconfigure, remove it first:  emkeel eject"},
-    "warn_isrepo": {"es": "⚠ Este directorio ya es un repo git con historial → lo configuro como repo existente (rama + PR).",
-                    "en": "⚠ This is already a git repo with history → setting it up as an existing repo (branch + PR)."},
-    "warn_norepo": {"es": "⚠ Aún no hay repo git con commits aquí → lo configuro como proyecto nuevo.",
-                    "en": "⚠ No git repo with commits here yet → setting it up as a new project."},
+    "warn_isrepo_q": {"es": "⚠ Detecté un repo git con historial aquí. ¿Cómo lo configuro?",
+                      "en": "⚠ This is already a git repo with history. How should I set it up?"},
+    "opt_existing":  {"es": "Repo existente (rama + PR) — recomendado",
+                      "en": "Existing repo (branch + PR) — recommended"},
+    "opt_new_risky": {"es": "Proyecto nuevo (commiteará a tu rama actual)",
+                      "en": "New project (will commit to your current branch)"},
+    "warn_norepo":   {"es": "⚠ Aún no hay repo git con commits aquí → lo configuro como proyecto nuevo.",
+                      "en": "⚠ No git repo with commits here yet → setting it up as a new project."},
 }
 
 
@@ -195,14 +199,18 @@ def main(argv: list[str] | None = None, inp=input) -> int:
     if a.scenario is None:
         return _cancel(lang)
 
-    # Cross-check the answer against reality (don't trust a wrong answer):
-    # "new" inside a repo with history would commit straight to your branch — correct it.
+    # Cross-check the answer against reality (don't silently trust a wrong answer):
+    # "new" inside a repo with history would commit straight to your branch — tell the user
+    # and let them choose (existing is the safe default).
     real = is_existing_repo(target)
     if a.scenario == "new" and real:
-        print("\n  " + t("warn_isrepo", lang))
-        a.scenario = "existing"
+        print("\n  " + t("warn_isrepo_q", lang))
+        choice = _choice("", [("existing", t("opt_existing", lang)), ("new", t("opt_new_risky", lang))], inp)
+        if choice is None:
+            return _cancel(lang)
+        a.scenario = choice
     elif a.scenario == "existing" and not real:
-        print("\n  " + t("warn_norepo", lang))
+        print("\n  " + t("warn_norepo", lang))   # no repo here → only "new" makes sense
         a.scenario = "new"
 
     d = derive_defaults(target)

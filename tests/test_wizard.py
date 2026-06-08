@@ -103,21 +103,34 @@ def test_is_existing_repo(tmp_path):
     assert is_existing_repo(tmp_path) is True          # has a commit
 
 
-def test_main_new_in_existing_repo_switches_to_existing(tmp_path, monkeypatch, capsys):
+def _branch(p):
+    return subprocess.run(["git", "branch", "--show-current"], cwd=p,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def test_main_new_in_existing_repo_asks_and_recommends_existing(tmp_path, monkeypatch, capsys):
     # The footgun: a real repo, but the user answers "new project".
     _init_repo(tmp_path)
     monkeypatch.chdir(tmp_path)
-    # lang=en, scenario=NEW(2) → cross-check corrects to existing → repo⏎,url⏎,proj⏎,key,continue
-    answers = iter(["2", "2", "", "", "", "SCRUM-7", "y"])
+    # lang=en, scenario=NEW(2) → wizard asks → pick existing(1) → repo⏎,url⏎,proj⏎,key,continue
+    answers = iter(["2", "2", "1", "", "", "", "SCRUM-7", "y"])
     assert main(inp=lambda *_: next(answers)) == 0
     out = capsys.readouterr().out
-    assert "existing repo" in out                       # warned + switched
-    cur = subprocess.run(["git", "branch", "--show-current"], cwd=tmp_path,
-                         capture_output=True, text=True).stdout.strip()
-    assert cur == "chore/SCRUM-7-adopt-emkeel"          # made a branch, did NOT commit to main
-    # main itself has no emkeel.toml
-    show = subprocess.run(["git", "show", "main:emkeel.toml"], cwd=tmp_path, capture_output=True)
-    assert show.returncode != 0
+    assert "already a git repo with history" in out      # informed, not silent
+    assert _branch(tmp_path) == "chore/SCRUM-7-adopt-emkeel"   # branch, NOT main
+    assert subprocess.run(["git", "show", "main:emkeel.toml"], cwd=tmp_path,
+                          capture_output=True).returncode != 0  # main untouched
+
+
+def test_main_new_in_existing_repo_user_insists_new(tmp_path, monkeypatch, capsys):
+    # If the user explicitly picks "new" anyway, it's allowed (their informed choice).
+    _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # lang=en, scenario=NEW(2) → wizard asks → pick new(2) → repo⏎,url⏎,proj⏎,continue
+    answers = iter(["2", "2", "2", "", "", "", "y"])
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert _branch(tmp_path) == "main"                   # stayed on main (their choice)
+    assert (tmp_path / "emkeel.toml").is_file()
 
 
 def test_main_detects_existing(tmp_path, monkeypatch, capsys):
