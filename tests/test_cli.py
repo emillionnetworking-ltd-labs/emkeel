@@ -18,6 +18,8 @@ def test_onboard_prints_playbook(capsys):
     out = capsys.readouterr().out
     assert "paste" in out.lower()        # the human "paste to your agent" header
     assert "onboarding" in out.lower()   # the playbook content
+    assert "setup --json" in out          # relays canonical questions, doesn't invent them
+    assert "eject" in out                 # covers the removal flow too
 
 
 def test_init_dispatch(tmp_path):

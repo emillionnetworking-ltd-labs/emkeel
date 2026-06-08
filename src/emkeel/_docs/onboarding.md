@@ -46,6 +46,16 @@ https://id.atlassian.net/manage-profile/security/api-tokens
 Run `emkeel doctor` → confirm **"All set"**. The PR merges when the `gates` pass (auto-merge if
 enabled); merging moves the linked Jira ticket to Done.
 
+## Removing Emkeel (if asked: eject + uninstall)
+Same rules — transcribe, be brief, in order:
+1. Ask what to remove (translated): the **wiring** (the basics) · also **`emkeel-governance/`**? ·
+   also the **GitHub side** (branch protection + secrets + push the removal)?
+2. Run the deterministic command (the push stays visible): `emkeel eject --yes` plus
+   **`--purge`** (governance), **`--remote`** (GitHub side), or **`--all`** (everything).
+3. To remove the tool from the machine too — **confirm first** (after this, `emkeel` is gone):
+   `pipx uninstall emkeel`.
+> **Uninstalling the tool ≠ un-governing the repo** — always `emkeel eject` first, then uninstall.
+
 ## Hard rules
 - **Transcribe, don't decide.** Present `emkeel setup --json` questions, run Emkeel's commands — nothing else.
 - Never commit to `main`; stage only Emkeel's files; never `git add -A`.
