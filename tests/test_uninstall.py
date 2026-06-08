@@ -57,7 +57,7 @@ def test_interactive_eject_wiring_plus_governance(tmp_path):
     _governed(tmp_path)
     # wiring? Y · governance? y · GitHub side? n · proceed? y
     answers = iter(["y", "y", "n", "y"])
-    assert main([str(tmp_path)], inp=lambda *_: next(answers)) == 0
+    assert main([str(tmp_path)], inp=lambda *_: next(answers), lang="en") == 0
     assert not (tmp_path / "emkeel.toml").exists()
     assert not (tmp_path / "emkeel-governance").exists()   # purge confirmed interactively
 
@@ -65,13 +65,13 @@ def test_interactive_eject_wiring_plus_governance(tmp_path):
 def test_interactive_eject_final_confirm_cancels(tmp_path):
     _governed(tmp_path)
     answers = iter(["y", "n", "n", "n"])   # wiring y, gov n, remote n, PROCEED -> no
-    assert main([str(tmp_path)], inp=lambda *_: next(answers)) == 0
+    assert main([str(tmp_path)], inp=lambda *_: next(answers), lang="en") == 0
     assert (tmp_path / "emkeel.toml").exists()             # cancelled → nothing removed
 
 
 def test_interactive_eject_decline_wiring_aborts(tmp_path):
     _governed(tmp_path)
-    assert main([str(tmp_path)], inp=lambda *_: "n") == 0  # decline at the first question
+    assert main([str(tmp_path)], inp=lambda *_: "n", lang="en") == 0  # decline at the first question
     assert (tmp_path / "emkeel.toml").exists()
 
 
@@ -100,7 +100,7 @@ def test_remote_cleanup_runs_expected_commands():
     assert "git add emkeel.toml AGENTS.md" in joined                            # stage only our deletions
     assert "commit" in joined and "git push" in joined                          # commit + push
     assert "secret delete JIRA_TOKEN --repo acme/web" in joined                 # drop secrets
-    assert any(label == "push" and ok for label, ok in steps)
+    assert any(ok for label, ok in steps if "push" in label.lower())
 
 
 def test_remote_cleanup_handles_push_timeout():
