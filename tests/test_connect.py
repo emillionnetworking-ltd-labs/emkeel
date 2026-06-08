@@ -117,7 +117,7 @@ def test_finish_adopt_pushes_pr_and_automerges(tmp_path, monkeypatch):
             return SimpleNamespace(returncode=0, stdout="chore/SCRUM-1-adopt-emkeel", stderr="")
         return _ok()
 
-    answers = iter(["n", "n", "y"])                       # protect?(no) secrets?(no) finish-adopt?(yes)
+    answers = iter(["n", "n", "y", "n"])                  # protect?(no) secrets?(no) finish-adopt?(yes) wait-sync?(no)
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run) == 0
     joined = "\n".join(ran)
     assert "git push -u origin HEAD" in joined
