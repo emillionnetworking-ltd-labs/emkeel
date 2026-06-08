@@ -199,7 +199,46 @@ def _cancel(lang: str = "en") -> int:
     return 0
 
 
+def questions_json(cwd: Path) -> dict:
+    """Canonical questions + derived defaults for an AI front-end to present (it must NOT invent
+    its own). The AI shows these — translated to any language it likes — collects answers, then
+    calls the deterministic engine (`emkeel init` + git). The AI never decides governance itself.
+    """
+    from emkeel import __version__
+    d = derive_defaults(cwd)
+    return {
+        "engine": "emkeel",
+        "version": __version__,
+        "derived": {**d, "is_existing_repo": is_existing_repo(cwd)},
+        "questions": [
+            {"id": "language", "type": "choice",
+             "prompt": {"es": "¿Idioma?", "en": "Language?"},
+             "note": "the AI may offer ANY language and translate; the engine itself is es/en",
+             "options": [{"value": "es", "label": "Español"}, {"value": "en", "label": "English"}]},
+            {"id": "scenario", "type": "choice", "prompt": dict(T["scenario"]),
+             "options": [{"value": "existing", "label": dict(T["existing"])},
+                         {"value": "new", "label": dict(T["new"])}]},
+            {"id": "github_repo", "type": "text", "prompt": dict(T["ghrepo"]), "default": d["github_repo"]},
+            {"id": "jira_url", "type": "text", "prompt": dict(T["jiraurl"]), "default": d["jira_url"]},
+            {"id": "jira_project", "type": "text", "prompt": dict(T["jiraproj"]), "default": d["jira_project"]},
+            {"id": "jira_key", "type": "text", "when": "scenario == existing", "prompt": dict(T["jirakey"]),
+             "default": (d["jira_project"] + "-1") if d["jira_project"] else ""},
+        ],
+        "apply": "emkeel init . --github-repo {github_repo} --jira-url {jira_url} --jira-project {jira_project}",
+        "after": [
+            "existing repo → git checkout -b chore/{jira_key}-adopt-emkeel BEFORE init; commit ONLY Emkeel's files; push; open a PR",
+            "new project → git init; commit; gh repo create {github_repo} --private --source=. --push",
+            "secrets are entered by the USER, never the AI → tell them to run `emkeel connect` (hidden token prompt) or set them in GitHub",
+            "to know the state / where to resume at any time → run `emkeel doctor`",
+        ],
+    }
+
+
 def main(argv: list[str] | None = None, inp=input) -> int:
+    if argv and "--json" in argv:                # canonical questions for an AI front-end
+        import json
+        print(json.dumps(questions_json(Path(".")), ensure_ascii=False, indent=2))
+        return 0
     target = Path(".")
     if (target / "emkeel.toml").is_file():       # already set up → don't re-run
         print("\n  " + t("already", "es"))
@@ -284,4 +323,4 @@ def _maybe_connect(lang: str, inp) -> None:
 
 if __name__ == "__main__":
     import sys
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

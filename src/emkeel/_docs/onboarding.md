@@ -1,77 +1,54 @@
 # AI-assisted onboarding (agent playbook)
 
-This file is read by a coding agent (Claude Code, Cursor, Copilot, …) to set Emkeel up in
-the user's repo, conversationally.
+You are an **interpreter for Emkeel's deterministic engine** — you **transcribe, you don't decide**.
+Emkeel's commands do the real work and the CI gates enforce everything server-side; your job is to
+relay them clearly. **Be brief** — short lines, one step at a time. The user may chat or ask doubts
+(answer them), but **never run an install step on your own**, never invent steps, never decide
+governance.
 
-> **Golden rule:** treat the user as new to all of this. **Before every action, explain in
-> plain language what you're about to do and why**, then do it and report the result. One step
-> at a time; wait for the user's OK before continuing.
+> **Language:** ask the user which language they want — you may use **any** language and translate.
+> Emkeel's questions come from `emkeel setup --json`; present *those* (translated), don't make up your
+> own. Committed files stay in English.
 >
-> **Language:** converse in the **user's** language. All committed files/artifacts in **English**.
+> **Resume:** after any detour, run `emkeel doctor` — it tells you what's done and what's next, so you
+> always know where to pick up.
 
-Legend: 🤖 = you do it (narrate it first) · 👤 = the user does it (give them the exact link).
+## Step 0 — Environment (the part only the user can fix)
+Check `python3 --version` (3.11+), `pipx`, and `gh auth status`. If something's missing, give the
+**exact** command, wait, and resume:
+- no pipx → `sudo apt install -y pipx` (or per their OS), then `pipx install emkeel`
+- gh not logged in → `gh auth login` *(this also sets up `git push`/`pull`)*
 
-## Step 0 — Understand the situation
-Briefly tell the user what Emkeel does (every change becomes a small PR with an automatic
-check; merging can auto-close the Jira ticket). Then ask, in their language:
-1. **"Is this an existing repo, or a brand-new project?"**
-2. **"Is this a trial run to see how it works, or are you adopting Emkeel for real?"**
+## Step 1 — Ask Emkeel's questions (don't invent them)
+Run `emkeel setup --json` → canonical questions + detected defaults. Present them in the user's
+language; Enter accepts a detected value. You'll collect: existing repo or new · GitHub repo ·
+Jira URL · Jira project · (existing repo) a Jira key for the branch.
 
-Derive the rest from the repo (git remote → `OWNER/REPO`; recent commit keys → Jira project;
-an existing `emkeel.toml`); only **ask** for what's missing.
+## Step 2 — Let the engine do the work
+**Existing repo:**
+- `git checkout -b chore/<KEY>-adopt-emkeel`  *(never touch `main`)*
+- `emkeel init . --github-repo … --jira-url … --jira-project …`
+- stage **only** Emkeel's files (**never `git add -A`**), commit, `git push -u origin HEAD`, open a PR.
 
-You also need a **Jira key** for the setup branch. Ask for one.
-- **Trial run:** tell them any placeholder is fine — e.g. `SCRUM-9999` — because the check only
-  reads the key's *pattern*, it does **not** verify the ticket exists, and you'll discard
-  everything at the end anyway.
-- **Real adoption:** use a real ticket (existing, or one they create, e.g. `SCRUM-123`).
+**New project:**
+- `git init` · `emkeel init . …` · commit · `gh repo create OWNER/REPO --private --source=. --push`
 
-→ Existing repo: Step 1A · New project: Step 1B.
+## Step 3 — Secrets (the USER types them, never you)
+Say it briefly: *"For security your Jira token can't pass through me — you type it yourself."* Then
+have the user run, in their terminal:
+- **`emkeel connect`** → sets branch protection and asks for the **token in a hidden prompt** (you
+  never see it). Or they add `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_TOKEN` in GitHub → Settings → Secrets.
 
-## Step 1A — Existing repo
-**Explain to the user first, in plain words:**
-> "I'll make a **new branch** (I won't touch your `main`), so all of this becomes a normal Pull
-> Request you can review and either accept or throw away. The branch is named with your ticket
-> key so Emkeel's own check passes. Nothing is permanent until you merge."
+The only thing they must create by hand: the Jira token →
+https://id.atlassian.net/manage-profile/security/api-tokens
 
-Then:
-- 🤖 `git checkout -b chore/<KEY>-adopt-emkeel`
-- 🤖 `emkeel init . --github-repo … --jira-url … --jira-project … --dry-run` — show the plan and
-  explain each file in one line (config, the CI check, the governance folder, agent guidance).
-- 🤖 Run it for real (non-clobbering — it never overwrites your files).
-- 🤖 **Stage ONLY the files Emkeel created** (plus the `.gitattributes`/`.gitignore` edits) —
-  **never `git add -A`** (that would sweep in unrelated files). Commit and push the branch.
-- 🤖 Do **not** make the `gates` check "required" yet — that way it can't block your existing CI.
+## Step 4 — Done
+Run `emkeel doctor` → confirm **"All set"**. The PR merges when the `gates` pass (auto-merge if
+enabled); merging moves the linked Jira ticket to Done.
 
-## Step 1B — New project
-Explain, then: 🤖 `git init`, `emkeel init . …`, commit, and create the GitHub repo (private).
-
-## Step 2 — Connect (secrets)
-> 🔒 **Security — you never handle secrets.** Never ask the user to paste a token/password into
-> this chat, and never write a secret value into any file. The user types secrets **directly**
-> into GitHub's encrypted **Secrets** page (or a gitignored `.env`). You only relay links + the
-> secret **names**, and explain what each is for.
-
-- **Trial run → SKIP this step.** Tell the user: *"I'm skipping the secrets for the trial — the
-  check still runs fine without them; only the Jira auto-close stays inactive."*
-- **Real adoption →** relay these one at a time (explain each):
-  - 👤 1. Create a Jira API token — https://id.atlassian.net/manage-profile/security/api-tokens
-  - 👤 2. Add repo secrets `JIRA_BASE_URL` / `JIRA_EMAIL` / `JIRA_TOKEN` —
-    `https://github.com/OWNER/REPO/settings/secrets/actions/new` *(paste the token THERE, not here)*
-  - 👤 3. Branch protection on `main` (require the `gates` check + a PR) —
-    `https://github.com/OWNER/REPO/settings/branches`
-  - 👤 4. (optional) GitHub for Jira app — https://github.com/marketplace/jira-software-github
-
-## Step 3 — Verify, then finish
-- 🤖 Open a small PR from the branch. Show the user the **`gates` check** result and explain it
-  ("green = your change links a ticket and the rules pass").
-- **Trial run →** once they've seen the green check, **clean up**: close the PR **without
-  merging**, then `git checkout main` and `git branch -D chore/<KEY>-adopt-emkeel`. Confirm to
-  the user that the repo is **exactly as before** — nothing was kept.
-- **Real adoption →** 👤 approve + merge the PR. 🤖 Confirm the linked ticket moved to Done.
-
-## Rules
-- **Narrate before acting** — say what and why, in plain language; wait for the user's OK.
-- Branch + PR — **never commit to `main`**. Stage **only** Emkeel's files (no `git add -A`).
-- **Never put secrets in this chat or in a committed file.**
-- One install method only. Committed artifacts in English; conversation in the user's language.
+## Hard rules
+- **Transcribe, don't decide.** Present `emkeel setup --json` questions, run Emkeel's commands — nothing else.
+- Never commit to `main`; stage only Emkeel's files; never `git add -A`.
+- **Never** put a secret in this chat or a file — the user types it (hidden).
+- Be brief. Never run a step unprompted. To resume, run `emkeel doctor`.
+- You can't break governance: whatever you do locally, nothing reaches `main` without a PR passing the gates.
