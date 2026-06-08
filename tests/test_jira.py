@@ -52,6 +52,8 @@ def test_transition_hard_fail_on_post_error():
 
 def test_main_derives_key_from_branch(monkeypatch):
     seen = {}
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")   # past the secrets guard so main reaches transition_issue
     monkeypatch.setattr(J, "transition_issue", lambda key, status="Done": (seen.setdefault("key", key), (True, "ok"))[1])
     monkeypatch.setenv("EMKEEL_BRANCH", "feat/KEEL-6-jira-transition")
     monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
