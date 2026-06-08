@@ -192,11 +192,6 @@ def _agents_md() -> str:
 
 Rules that matter live in CI + branch protection, not here (this file is best-effort).
 
-## Managing Emkeel itself
-For any Emkeel task (set up, connect, eject, doctor, sync), run **`emkeel onboard` first and follow
-it** — it is the single entry point. Do not run emkeel subcommands on your own or improvise: onboard
-orchestrates them safely, asks the user's language, and uses the canonical `--json` questions.
-
 ## Loop
 1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.

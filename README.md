@@ -105,7 +105,6 @@ pipx uninstall emkeel
 | `emkeel setup` | interactive wizard (recommended — does everything) |
 | `emkeel connect` | just the GitHub side (branch protection + secrets), standalone |
 | `emkeel init .` | scaffold non-interactively (for scripts/CI) |
-| `emkeel onboard` | print the AI-assisted onboarding playbook |
 
 **Check / maintain**
 
@@ -127,7 +126,8 @@ pipx uninstall emkeel
 
 | Command | What it does |
 | --- | --- |
-| `pipx upgrade emkeel` | update Emkeel |
+| `pipx upgrade emkeel` | update the Emkeel tool |
+| `emkeel update` | after upgrading, refresh an adopted repo's wiring to the new version |
 
 > **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0` — auto patches/minors; a breaking major is opt-in.
 
