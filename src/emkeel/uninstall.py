@@ -1,13 +1,12 @@
 """emkeel eject — reverse `emkeel init` in a repo (command: `emkeel eject`; alias: `emkeel uninstall`).
 
-Removes the wiring Emkeel added (workflows, emkeel.toml, .env.example, AGENTS.md, CLAUDE.md).
-For .gitattributes/.gitignore it removes the file **only if Emkeel created it** (it holds just
-Emkeel's one line) — it NEVER strips a line you may already have had. **Keeps
-emkeel-governance/** (your ADRs/specs/records) unless `--purge`. Dry-run unless `--yes`.
+Interactive by default (asks language first, then per category, then confirms). Removes the wiring
+Emkeel added (workflows, emkeel.toml, .env.example, AGENTS.md, CLAUDE.md). For
+.gitattributes/.gitignore it removes the file **only if Emkeel created it** — it NEVER strips a
+line you already had. **Keeps emkeel-governance/** unless you remove it. `--yes` for scripts.
 
-With `--remote` it also finishes the un-govern on GitHub: drops branch protection (so removing
-the gates workflow doesn't deadlock a PR), commits + pushes the removal, and drops the Jira
-secrets — the mirror image of `emkeel connect`.
+With `--remote` it also finishes on GitHub: drops branch protection (so removing the gates
+workflow doesn't deadlock), commits + pushes the removal, and drops the Jira secrets.
 """
 
 from __future__ import annotations
@@ -20,9 +19,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from emkeel.i18n import ask_language, is_yes, t
 from emkeel.init import APPEND_LINES
 
-# Pure-wiring files that `emkeel init` creates (safe to remove on uninstall).
 WIRING_FILES = [
     ".github/workflows/emkeel-ci.yml",
     ".github/workflows/jira-transition.yml",
@@ -32,6 +31,46 @@ WIRING_FILES = [
     "CLAUDE.md",
 ]
 GOVERNANCE_DIR = "emkeel-governance"
+
+T: dict[str, dict[str, str]] = {
+    "header":   {"es": "emkeel eject — quitar Emkeel de este repo", "en": "emkeel eject — remove Emkeel from this repo"},
+    "q_wiring": {"es": "  ¿Quitar el cableado de Emkeel (workflows, emkeel.toml, AGENTS/CLAUDE)? [S/n] ",
+                 "en": "  Remove Emkeel's wiring (workflows, emkeel.toml, AGENTS/CLAUDE)? [Y/n] "},
+    "q_gov":    {"es": "  ¿Quitar también emkeel-governance/ (tus ADR/specs/records)? [s/N] ",
+                 "en": "  Also remove emkeel-governance/ (your ADRs/specs/records)? [y/N] "},
+    "q_remote": {"es": "  ¿Quitar también el lado GitHub (protección + secrets + push del borrado)? [s/N] ",
+                 "en": "  Also remove the GitHub side (branch protection + secrets + push the removal)? [y/N] "},
+    "about":    {"es": "\n  ⚠ Voy a quitar: {summary}", "en": "\n  ⚠ About to remove: {summary}"},
+    "q_proceed":{"es": "  ¿Proceder? [s/N] ", "en": "  Proceed? [y/N] "},
+    "cancelled":{"es": "  Cancelado — no se cambió nada.", "en": "  Cancelled — nothing changed."},
+    "removed":  {"es": "quitado", "en": "removed"},
+    "clean":    {"es": "  (no hay archivos locales de Emkeel que quitar — ya está limpio)",
+                 "en": "  (no local Emkeel files to remove — already clean)"},
+    "kept":     {"es": "\nConservado {dir}/ (tu historial).", "en": "\nKept {dir}/ (your history)."},
+    "finishing":{"es": "\nTerminando en GitHub ({repo}):", "en": "\nFinishing on GitHub ({repo}):"},
+    "skip_gh":  {"es": "\n--remote omitido: gh no está autenticado (corre `gh auth login`).",
+                 "en": "\n--remote skipped: gh isn't authenticated (run `gh auth login`)."},
+    "skip_norepo":{"es": "\n--remote omitido: no se encontró remoto de GitHub.",
+                   "en": "\n--remote skipped: no GitHub remote found."},
+    "teardown": {"es": "\nEsto solo desgobernó el repo. Para quitar la herramienta de tu máquina:\n  pipx uninstall emkeel",
+                 "en": "\nThis only un-governed the repo. To remove the emkeel tool from your machine:\n  pipx uninstall emkeel"},
+    "dry_note": {"es": "\n(no se cambió nada — corre `emkeel eject` para elegir interactivo, o añade --yes)",
+                 "en": "\n(nothing changed — run `emkeel eject` to choose interactively, or add --yes)"},
+    "non_tty":  {"es": "emkeel eject: shell no interactivo — reejecuta con --yes (+ --purge/--remote/--all) o en una terminal.",
+                 "en": "emkeel eject: non-interactive shell — re-run with --yes (+ --purge/--remote/--all) or in a terminal."},
+    "s_wiring": {"es": "cableado", "en": "wiring"},
+    "s_remote": {"es": "lado GitHub", "en": "GitHub side"},
+    # remote_cleanup steps
+    "r_pushing":{"es": "  Subiendo el borrado… (salida de git abajo; Ctrl-C para saltar)",
+                 "en": "  Pushing the removal… (git output below; Ctrl-C to skip)"},
+    "r_protect":{"es": "protección de rama quitada", "en": "branch protection cleared"},
+    "r_commit": {"es": "commit del borrado", "en": "commit removal"},
+    "r_push":   {"es": "push hecho", "en": "pushed"},
+    "r_push_fail":{"es": "push FALLÓ — hazlo a mano: git push", "en": "push FAILED — do it manually: git push"},
+    "r_push_to":{"es": "push se colgó (¿hook?) — hazlo a mano: git push", "en": "push timed out (hook?) — do it manually: git push"},
+    "r_push_cx":{"es": "push cancelado — hazlo a mano: git push", "en": "push cancelled — do it manually: git push"},
+    "r_secrets":{"es": "secrets de Jira borrados", "en": "Jira secrets removed"},
+}
 
 
 @dataclass
@@ -50,8 +89,6 @@ def plan_uninstall(target: Path, purge: bool) -> list[Action]:
             actions.append(Action(rel, "absent"))
             continue
         nonblank = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        # Remove the file only if Emkeel created it (it holds just our one line);
-        # otherwise leave it untouched — never strip a line the user may already have.
         actions.append(Action(rel, "remove" if nonblank == [line] else "leave"))
     gov = target / GOVERNANCE_DIR
     if gov.is_dir():
@@ -69,7 +106,6 @@ def apply_uninstall(target: Path, purge: bool, dry_run: bool) -> list[Action]:
             p.unlink(missing_ok=True)
         elif a.kind == "remove-dir":
             shutil.rmtree(p, ignore_errors=True)
-        # "leave" / "keep" / "absent" → do nothing
     return actions
 
 
@@ -89,105 +125,105 @@ def repo_from_git(target: Path, run=_run) -> str:
     return ""
 
 
-def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run) -> list[tuple[str, bool]]:
+def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run, lang: str = "en") -> list[tuple[str, bool]]:
     """Finish the un-govern on GitHub: drop branch protection (so removing the gates workflow
     doesn't deadlock), commit + push the removals, and drop the Jira secrets."""
     steps: list[tuple[str, bool]] = []
     run(["gh", "api", "-X", "DELETE", f"repos/{repo}/branches/{branch}/protection"])
-    steps.append(("branch protection cleared", True))   # 404 (already none) is fine too
+    steps.append((t(T, "r_protect", lang), True))   # 404 (already none) is fine too
     if removed_paths:
-        run(["git", "add", *removed_paths])             # stage only Emkeel's deletions (not your files)
+        run(["git", "add", *removed_paths])         # stage only Emkeel's deletions (not your files)
         c = run(["git", "commit", "-m", "chore(emkeel): remove governance (eject)"])
-        steps.append(("commit removal", c.returncode == 0))
+        steps.append((t(T, "r_commit", lang), c.returncode == 0))
         try:
-            print("  Pushing the removal… (git output below; Ctrl-C to skip)")
+            print(t(T, "r_pushing", lang))
             p = run(["git", "push"], capture=False)
-            steps.append(("push" if p.returncode == 0 else "push FAILED — do it manually: git push", p.returncode == 0))
+            steps.append((t(T, "r_push", lang) if p.returncode == 0 else t(T, "r_push_fail", lang), p.returncode == 0))
         except subprocess.TimeoutExpired:
-            steps.append(("push timed out (hook?) — do it manually: git push", False))
+            steps.append((t(T, "r_push_to", lang), False))
         except KeyboardInterrupt:
-            steps.append(("push cancelled — do it manually: git push", False))
+            steps.append((t(T, "r_push_cx", lang), False))
     for name in ("JIRA_TOKEN", "JIRA_EMAIL", "JIRA_BASE_URL"):
         run(["gh", "secret", "delete", name, "--repo", repo])
-    steps.append(("Jira secrets removed", True))
+    steps.append((t(T, "r_secrets", lang), True))
     return steps
 
 
-def _ask(inp, prompt: str, default: bool) -> bool:
-    a = inp(prompt).strip().lower()
-    return default if a == "" else a in ("y", "yes", "s", "si")
-
-
-def _do_eject(target: Path, purge: bool, remote: bool) -> int:
+def _do_eject(target: Path, purge: bool, remote: bool, lang: str) -> int:
     actions = apply_uninstall(target, purge, dry_run=False)
     removed = [a for a in actions if a.kind in ("remove", "remove-dir")]
     print(f"\nemkeel eject -> {target}")
     if removed:
         for a in removed:
-            print(f"  removed   {a.path}")
+            print(f"  {t(T, 'removed', lang)}   {a.path}")
     else:
-        print("  (no local Emkeel files to remove — already clean)")
+        print(t(T, "clean", lang))
     if not purge and (target / GOVERNANCE_DIR).is_dir():
-        print(f"\nKept {GOVERNANCE_DIR}/ (your history).")
+        print(t(T, "kept", lang).format(dir=GOVERNANCE_DIR))
     if remote:
         from emkeel.connect import gh_ok
         repo = repo_from_git(target)
         if not gh_ok():
-            print("\n--remote skipped: gh isn't authenticated (run `gh auth login`).")
+            print(t(T, "skip_gh", lang))
         elif not repo:
-            print("\n--remote skipped: no GitHub remote found.")
+            print(t(T, "skip_norepo", lang))
         else:
-            print(f"\nFinishing on GitHub ({repo}):")
-            removed = [a.path for a in actions if a.kind in ("remove", "remove-dir")]
-            for label, ok in remote_cleanup(repo, "main", removed):
+            print(t(T, "finishing", lang).format(repo=repo))
+            paths = [a.path for a in actions if a.kind in ("remove", "remove-dir")]
+            for label, ok in remote_cleanup(repo, "main", paths, lang=lang):
                 print(f"  {'✓' if ok else '✗'} {label}")
-    print("\nThis only un-governed the repo. To remove the emkeel tool from your machine:\n  pipx uninstall emkeel")
+    print(t(T, "teardown", lang))
     return 0
 
 
-def main(argv: list[str] | None = None, inp=input) -> int:
-    ap = argparse.ArgumentParser(
-        prog="emkeel eject",
-        description="Remove Emkeel from this repo. Interactive by default (asks + confirms).",
-    )
+def main(argv: list[str] | None = None, inp=input, lang=None) -> int:
+    ap = argparse.ArgumentParser(prog="emkeel eject",
+                                 description="Remove Emkeel from this repo. Interactive by default.")
     ap.add_argument("path", nargs="?", default=".")
     ap.add_argument("--purge", action="store_true", help="also remove emkeel-governance/ (your artifacts)")
     ap.add_argument("--remote", action="store_true", help="also remove the GitHub side (protection + secrets + push)")
     ap.add_argument("--all", action="store_true", help="wiring + governance + GitHub side")
     ap.add_argument("--yes", action="store_true", help="apply without prompts (for scripts/CI)")
     ap.add_argument("--dry-run", action="store_true", help="preview only, change nothing")
+    ap.add_argument("--lang", choices=["es", "en"], default=None)
     ns = ap.parse_args(argv)
     target = Path(ns.path)
     purge, remote = ns.purge or ns.all, ns.remote or ns.all
+    lang = lang or ns.lang
 
     if ns.dry_run:
         actions = apply_uninstall(target, purge, dry_run=True)
         print(f"emkeel eject [dry-run] -> {target}")
         for a in actions:
             print(f"  {a.kind:11} {a.path}")
-        print("\n(nothing changed — run `emkeel eject` to choose interactively, or add --yes)")
+        print(t(T, "dry_note", lang or "en"))
         return 0
 
     if ns.yes:                       # non-interactive: scripts/CI opted out of prompts
-        return _do_eject(target, purge, remote)
+        return _do_eject(target, purge, remote, lang or "en")
 
-    if inp is input and not sys.stdin.isatty():   # can't prompt safely → don't guess
-        print("emkeel eject: non-interactive shell — re-run with --yes (+ --purge/--remote/--all) or in a terminal.")
+    if inp is input and not sys.stdin.isatty():
+        print(t(T, "non_tty", lang or "en"))
         return 1
 
-    # Interactive (default): ask per category, then one final confirmation.
-    print("\n  emkeel eject — remove Emkeel from this repo\n  " + "─" * 43)
-    if not _ask(inp, "  Remove Emkeel's wiring (workflows, emkeel.toml, AGENTS/CLAUDE)? [Y/n] ", True):
-        print("  Cancelled — nothing changed.")
+    if lang is None:
+        lang = ask_language(inp)
+        if lang is None:
+            return 0
+
+    print(f"\n  {t(T, 'header', lang)}\n  " + "─" * 43)
+    if not is_yes(inp(t(T, "q_wiring", lang))):
+        print(t(T, "cancelled", lang))
         return 0
     if (target / GOVERNANCE_DIR).is_dir():
-        purge = _ask(inp, "  Also remove emkeel-governance/ (your ADRs/specs/records)? [y/N] ", False)
-    remote = _ask(inp, "  Also remove the GitHub side (branch protection + secrets + push the removal)? [y/N] ", False)
-    summary = "wiring" + (" + emkeel-governance/" if purge else "") + (" + GitHub side" if remote else "")
-    if not _ask(inp, f"\n  ⚠ About to remove: {summary}\n  Proceed? [y/N] ", False):
-        print("  Cancelled — nothing changed.")
+        purge = is_yes(inp(t(T, "q_gov", lang)))
+    remote = is_yes(inp(t(T, "q_remote", lang)))
+    summary = t(T, "s_wiring", lang) + (f" + {GOVERNANCE_DIR}/" if purge else "") + (f" + {t(T, 's_remote', lang)}" if remote else "")
+    print(t(T, "about", lang).format(summary=summary))
+    if not is_yes(inp(t(T, "q_proceed", lang))):
+        print(t(T, "cancelled", lang))
         return 0
-    return _do_eject(target, purge, remote)
+    return _do_eject(target, purge, remote, lang)
 
 
 if __name__ == "__main__":

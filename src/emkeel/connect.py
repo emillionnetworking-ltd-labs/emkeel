@@ -8,7 +8,7 @@ hidden prompt here — it never goes through an AI chat. Everything is confirmed
   pre-push hook could hang; that belongs to the AI-interpreter, not a deterministic command.)
 
 `--dry-run` prints the gh commands without running anything. If gh isn't available/authed, it
-points you to the web links (same as `emkeel doctor`).
+points you to the web links (same as `emkeel doctor`). Bilingual (es/en) via `--lang` or a prompt.
 """
 
 from __future__ import annotations
@@ -21,7 +21,73 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from emkeel.i18n import ask_language, is_yes, t
+
 TOKEN_LINK = "https://id.atlassian.net/manage-profile/security/api-tokens"
+
+T: dict[str, dict[str, str]] = {
+    "no_toml":   {"es": "  No hay emkeel.toml aquí — corre `emkeel setup` primero.",
+                  "en": "  No emkeel.toml here — run `emkeel setup` first."},
+    "header":    {"es": "emkeel connect → conectar GitHub", "en": "emkeel connect → wire up GitHub"},
+    "dry_intro": {"es": "  Ejecutaría (gh):", "en": "  Would run (gh):"},
+    "dry_create":{"es": "    • gh repo create {repo} --private --source=. --push   (solo si aún no está en GitHub)",
+                  "en": "    • gh repo create {repo} --private --source=. --push   (only if not on GitHub yet)"},
+    "dry_prot":  {"es": "    • gh api -X PUT repos/{repo}/branches/{branch}/protection   (exigir 'gates' + PR)",
+                  "en": "    • gh api -X PUT repos/{repo}/branches/{branch}/protection   (require 'gates' + PR)"},
+    "dry_sec":   {"es": "    • gh secret set JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN --repo {repo}",
+                  "en": "    • gh secret set JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN --repo {repo}"},
+    "dry_ship":  {"es": "    • (rama de adopción) git push -u origin HEAD ; gh pr create --fill ; gh pr merge --auto --squash",
+                  "en": "    • (adopt branch) git push -u origin HEAD ; gh pr create --fill ; gh pr merge --auto --squash"},
+    "dry_manual":{"es": "  Manual (solo tú): crea el token de Jira → {link}",
+                  "en": "  Manual (only you): create the Jira token → {link}"},
+    "no_gh":     {"es": "  gh no está autenticado. Corre `gh auth login` y reintenta — o usa los enlaces web de `emkeel doctor`.",
+                  "en": "  gh isn't authenticated. Run `gh auth login` and retry — or use the web links from `emkeel doctor`."},
+    "q_create":  {"es": "  El repo aún no está en GitHub. ¿Crearlo (privado) y subir? [S/n] ",
+                  "en": "  Repo isn't on GitHub yet. Create it (private) and push? [Y/n] "},
+    "ok_create": {"es": "  ✓ repo creado + subido", "en": "  ✓ repo created + pushed"},
+    "fail_create":{"es": "     Créalo a mano:  gh repo create {repo} --private --source=. --push\n     Luego:  emkeel connect",
+                   "en": "     Create it manually:  gh repo create {repo} --private --source=. --push\n     Then re-run:  emkeel connect"},
+    "q_protect": {"es": "  ¿Exigir el check 'gates' + PRs en '{branch}'? [S/n] ",
+                  "en": "  Require the 'gates' check + PRs on '{branch}'? [Y/n] "},
+    "ok_protect":{"es": "  ✓ branch protection activada", "en": "  ✓ branch protection on"},
+    "fail_protect":{"es": "  ✗ {msg}\n     (¿necesitas permisos de admin? hazlo por la web)",
+                    "en": "  ✗ {msg}\n     (need admin rights? do it via the web link)"},
+    "q_secrets": {"es": "  ¿Configurar los secrets de Jira ahora? (pegarás el token, oculto) [S/n] ",
+                  "en": "  Set the Jira secrets now? (you'll paste the token, hidden) [Y/n] "},
+    "tok_first": {"es": "  Crea el token primero si no lo tienes: {link}",
+                  "en": "  Create the token first if you haven't: {link}"},
+    "email_q":   {"es": "  Email de Atlassian: ", "en": "  Atlassian email: "},
+    "token_q":   {"es": "  Token de Jira (oculto): ", "en": "  Jira API token (hidden): "},
+    "jira_ok":   {"es": "  ✓ Credenciales de Jira verificadas ({detail})",
+                  "en": "  ✓ Jira credentials verified ({detail})"},
+    "jira_bad":  {"es": "  ✗ Login de Jira falló ({detail}) — no se guarda. Revisa el email/token.",
+                  "en": "  ✗ Jira login failed ({detail}) — not saving. Check the email/token."},
+    "q_retry":   {"es": "  ¿Reintentar? [S/n] ", "en": "  Try again? [Y/n] "},
+    "sec_skip":  {"es": "  Secrets omitidos — config luego con `emkeel connect` (o en Settings del repo).",
+                  "en": "  Skipped secrets — set them later with `emkeel connect` (or in repo Settings)."},
+    "q_finish":  {"es": "  Terminar la adopción — subir '{cur}', abrir PR y auto-merge al pasar los gates? [s/N] ",
+                  "en": "  Finish the adopt — push '{cur}', open a PR and auto-merge when gates pass? [y/N] "},
+    "pushing":   {"es": "  Subiendo… (verás la salida de git; un pre-push hook puede tardar — Ctrl-C para saltar)",
+                  "en": "  Pushing… (you'll see git's output; a pre-push hook may take a moment — Ctrl-C to skip)"},
+    "push_fail": {"es": "  ✗ push: {msg}\n     Hazlo a mano:  git push -u origin HEAD  &&  gh pr create --fill  &&  gh pr merge --auto --squash",
+                  "en": "  ✗ push: {msg}\n     Do it manually:  git push -u origin HEAD  &&  gh pr create --fill  &&  gh pr merge --auto --squash"},
+    "pushed":    {"es": "  ✓ subido", "en": "  ✓ pushed"},
+    "pr_ok":     {"es": "  ✓ PR abierto — {out}", "en": "  ✓ PR opened — {out}"},
+    "pr_fail":   {"es": "  ✗ gh pr create: {out}", "en": "  ✗ gh pr create: {out}"},
+    "am_ok":     {"es": "  ✓ auto-merge activo — se fusiona al pasar los gates",
+                  "en": "  ✓ auto-merge on — merges when the gates pass"},
+    "am_fail":   {"es": "  ⚠ auto-merge: {msg}\n     El PR está abierto — mergéalo al ponerse verde, o activa 'Allow auto-merge' en Settings y reintenta.",
+                  "en": "  ⚠ auto-merge: {msg}\n     The PR is open — merge it once the gates are green, or enable 'Allow auto-merge' in repo Settings and re-run."},
+    "q_sync":    {"es": "  ¿Espero a que se fusione y sincronizo tu local (checkout main + pull + borrar esta rama)? [s/N] ",
+                  "en": "  Wait for it to merge and sync your local (checkout default + pull + remove this branch)? [y/N] "},
+    "waiting":   {"es": "  Esperando el merge (Ctrl-C para saltar)…", "en": "  Waiting for the merge (Ctrl-C to skip)…"},
+    "not_merged":{"es": "  ⏱ aún sin fusionar — corre `emkeel sync` luego para terminar.",
+                  "en": "  ⏱ not merged yet — run `emkeel sync` later to finish."},
+    "sync_skip": {"es": "\n  Saltado — corre `emkeel sync` cuando se fusione.",
+                  "en": "\n  Skipped — run `emkeel sync` once it merges."},
+    "sync_later":{"es": "  Cuando se fusione, corre:  emkeel sync", "en": "  When it merges, run:  emkeel sync"},
+    "done":      {"es": "\n  Listo. Comprueba con: emkeel doctor", "en": "\n  Done. Check with: emkeel doctor"},
+}
 
 
 def _run(args: list[str], stdin: str | None = None, timeout: float | None = None,
@@ -29,10 +95,6 @@ def _run(args: list[str], stdin: str | None = None, timeout: float | None = None
     if capture:
         return subprocess.run(args, capture_output=True, text=True, input=stdin, timeout=timeout)
     return subprocess.run(args, text=True, timeout=timeout)   # inherit the terminal (prompts/hooks visible)
-
-
-def _yes(s: str) -> bool:
-    return s.strip().lower() in ("", "y", "yes", "s", "si")
 
 
 @dataclass
@@ -142,60 +204,68 @@ def do_auto_merge(run=_run):
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
-def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
+def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) -> int:
     ap = argparse.ArgumentParser(prog="emkeel connect", description="Automate the GitHub side via gh.")
     ap.add_argument("--branch", default="main")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--lang", choices=["es", "en"], default=None)
     ns = ap.parse_args(argv if argv is not None else None)
+    lang = lang or ns.lang
 
     cfg = load_config(Path("."))
     if cfg is None or not cfg.repo:
-        print("  No emkeel.toml here — run `emkeel setup` first.")
+        print(t(T, "no_toml", lang or "en"))
         return 1
     repo, branch = cfg.repo, ns.branch
-    print(f"\n  emkeel connect → {repo}\n  " + "─" * 22)
 
     if ns.dry_run:
-        print("  Would run (gh):")
-        print(f"    • gh repo create {repo} --private --source=. --push   (only if not on GitHub yet)")
-        print(f"    • gh api -X PUT repos/{repo}/branches/{branch}/protection   (require 'gates' + PR)")
-        print(f"    • gh secret set JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN --repo {repo}")
-        print(f"    • (adopt branch) git push -u origin HEAD ; gh pr create --fill ; gh pr merge --auto --squash")
-        print(f"  Manual (only you): create the Jira token → {TOKEN_LINK}")
+        lang = lang or "en"
+        print(f"\n  {t(T, 'header', lang)} → {repo}\n  " + "─" * 26)
+        print(t(T, "dry_intro", lang))
+        print(t(T, "dry_create", lang).format(repo=repo))
+        print(t(T, "dry_prot", lang).format(repo=repo, branch=branch))
+        print(t(T, "dry_sec", lang).format(repo=repo))
+        print(t(T, "dry_ship", lang))
+        print(t(T, "dry_manual", lang).format(link=TOKEN_LINK))
         return 0
 
+    if lang is None:                     # standalone → ask; from setup → inherited
+        lang = ask_language(inp)
+        if lang is None:
+            return 0
+    print(f"\n  {t(T, 'header', lang)} → {repo}\n  " + "─" * 26)
+
     if not gh_ok(run):
-        print("  gh isn't authenticated. Run `gh auth login` and retry — or use the web links from `emkeel doctor`.")
+        print(t(T, "no_gh", lang))
         return 1
 
     # 1) New project? establish the GitHub connection first (safe: a fresh repo has no hooks).
     if not repo_exists(repo, run):
-        if _yes(inp("  Repo isn't on GitHub yet. Create it (private) and push? [Y/n] ")):
+        if is_yes(inp(t(T, "q_create", lang))):
             ok, msg = do_create_push(repo, run)
-            print("  ✓ repo created + pushed" if ok else f"  ✗ {msg}")
+            print(t(T, "ok_create", lang) if ok else f"  ✗ {msg}")
             if not ok:
-                print(f"     Create it manually:  gh repo create {repo} --private --source=. --push")
-                print("     Then re-run:  emkeel connect")
+                print(t(T, "fail_create", lang).format(repo=repo))
                 return 1
 
     # 2) Branch protection — require the gates check + PRs
-    if _yes(inp(f"  Require the 'gates' check + PRs on '{branch}'? [Y/n] ")):
+    if is_yes(inp(t(T, "q_protect", lang).format(branch=branch))):
         ok, msg = do_protect(repo, branch, run)
-        print("  ✓ branch protection on" if ok else f"  ✗ {msg}\n     (need admin rights? do it via the web link)")
+        print(t(T, "ok_protect", lang) if ok else t(T, "fail_protect", lang).format(msg=msg))
 
-    # 3) Secrets — token via hidden prompt; never in chat or logs
-    if _yes(inp("  Set the Jira secrets now? (you'll paste the token, hidden) [Y/n] ")):
-        print(f"  Create the token first if you haven't: {TOKEN_LINK}")
+    # 3) Secrets — token via hidden prompt; verified before saving; never in chat/logs
+    if is_yes(inp(t(T, "q_secrets", lang))):
+        print(t(T, "tok_first", lang).format(link=TOKEN_LINK))
         while True:
-            email = inp("  Atlassian email: ").strip()
-            token = getpass("  Jira API token (hidden): ").strip()
+            email = inp(t(T, "email_q", lang)).strip()
+            token = getpass(t(T, "token_q", lang)).strip()
             ok, detail = verify_jira(cfg.base_url, email, token)
             if ok:
-                print(f"  ✓ Jira credentials verified ({detail})")
+                print(t(T, "jira_ok", lang).format(detail=detail))
                 break
-            print(f"  ✗ Jira login failed ({detail}) — not saving. Check the email/token.")
-            if not _yes(inp("  Try again? [Y/n] ")):
-                print("  Skipped secrets — set them later with `emkeel connect` (or in repo Settings).")
+            print(t(T, "jira_bad", lang).format(detail=detail))
+            if not is_yes(inp(t(T, "q_retry", lang))):
+                print(t(T, "sec_skip", lang))
                 email = token = ""
                 break
         if email and token:
@@ -203,42 +273,37 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
                 ok, msg = do_secret(repo, name, val, run)
                 print(f"  {'✓' if ok else '✗'} {name}" + ("" if ok else f": {msg}"))
 
-    # 4) Finish the adopt — push the branch, open a PR, auto-merge when gates pass.
-    #    Scope: the emkeel ADOPTION PR only (you're on its branch). Normal changes stay human-merged.
+    # 4) Finish the adopt — push, PR, auto-merge (the adoption PR only; normal changes stay human-merged).
     cur = current_branch(run)
     if cur and cur != branch:
-        ans = inp(f"  Finish the adopt — push '{cur}', open a PR and auto-merge when gates pass? [y/N] ").strip().lower()
-        if ans in ("y", "yes", "s", "si"):
-            print("  Pushing… (you'll see git's output; a pre-push hook may take a moment — Ctrl-C to skip)")
+        if is_yes(inp(t(T, "q_finish", lang).format(cur=cur))):
+            print(t(T, "pushing", lang))
             ok, msg = do_push(run)
             if not ok:
-                print(f"  ✗ push: {msg}")
-                print("     Do it manually:  git push -u origin HEAD  &&  gh pr create --fill  &&  gh pr merge --auto --squash")
+                print(t(T, "push_fail", lang).format(msg=msg))
             else:
-                print("  ✓ pushed")
+                print(t(T, "pushed", lang))
                 okp, out = do_pr_create(run)
-                print(f"  ✓ PR opened — {out}" if okp else f"  ✗ gh pr create: {out}")
+                print(t(T, "pr_ok", lang).format(out=out) if okp else t(T, "pr_fail", lang).format(out=out))
                 if okp:
-                    allow_auto_merge(repo, run)      # repo setting must be on for --auto to work
+                    allow_auto_merge(repo, run)
                     okm, outm = do_auto_merge(run)
-                    print("  ✓ auto-merge on — merges when the gates pass" if okm
-                          else f"  ⚠ auto-merge: {outm}\n     The PR is open — merge it once the gates are green,"
-                               " or enable 'Allow auto-merge' in repo Settings and re-run `gh pr merge --auto`.")
-                    if okm and inp("  Wait for it to merge and sync your local (checkout default + pull + remove this branch)? [y/N] ").strip().lower() in ("y", "yes", "s", "si"):
+                    print(t(T, "am_ok", lang) if okm else t(T, "am_fail", lang).format(msg=outm))
+                    if okm and is_yes(inp(t(T, "q_sync", lang))):
                         from emkeel.sync import sync, wait_for_merge
-                        print("  Waiting for the merge (Ctrl-C to skip)…")
+                        print(t(T, "waiting", lang))
                         try:
                             if wait_for_merge(cur, run):
-                                for line in sync(run):
+                                for line in sync(run, lang=lang):
                                     print("  " + line)
                             else:
-                                print("  ⏱ not merged yet — run `emkeel sync` later to finish.")
+                                print(t(T, "not_merged", lang))
                         except KeyboardInterrupt:
-                            print("\n  Skipped — run `emkeel sync` once it merges.")
+                            print(t(T, "sync_skip", lang))
                     elif okm:
-                        print("  When it merges, run:  emkeel sync")
+                        print(t(T, "sync_later", lang))
 
-    print("\n  Done. Check with: emkeel doctor")
+    print(t(T, "done", lang))
     return 0
 
 

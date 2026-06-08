@@ -2,14 +2,26 @@
 
 Switches to the default branch, pulls, prunes, and deletes local branches that are already
 merged (detected via `--merged` OR an upstream that's `gone` — which catches squash-merges,
-where the branch commits aren't ancestors of the default). Safe + idempotent.
+where the branch commits aren't ancestors of the default). Safe + idempotent. Bilingual.
 """
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import time
 from pathlib import Path
+
+from emkeel.i18n import ask_language, t
+
+T: dict[str, dict[str, str]] = {
+    "header":   {"es": "emkeel sync", "en": "emkeel sync"},
+    "on":       {"es": "✓ en {db}", "en": "✓ on {db}"},
+    "pulled":   {"es": "✓ actualizado (pull)", "en": "✓ pulled"},
+    "pull_skip":{"es": "⚠ pull omitido (hazlo a mano: git pull)", "en": "⚠ pull skipped (do it manually: git pull)"},
+    "removed":  {"es": "✓ ramas fusionadas borradas: {names}", "en": "✓ removed merged branch(es): {names}"},
+    "none":     {"es": "✓ sin ramas fusionadas que limpiar", "en": "✓ no merged branches to clean"},
+}
 
 
 def _run(args: list[str], capture: bool = True, timeout: float | None = None) -> subprocess.CompletedProcess:
@@ -48,18 +60,18 @@ def cleanable_branches(default: str, run=_run) -> list[str]:
     return sorted(found)
 
 
-def sync(run=_run) -> list[str]:
+def sync(run=_run, lang: str = "en") -> list[str]:
     out: list[str] = []
     db = default_branch(run)
     run(["git", "checkout", db], capture=False)
-    out.append(f"✓ on {db}")
+    out.append(t(T, "on", lang).format(db=db))
     p = run(["git", "pull", "--ff-only"], capture=False)
-    out.append("✓ pulled" if p.returncode == 0 else "⚠ pull skipped (do it manually: git pull)")
+    out.append(t(T, "pulled", lang) if p.returncode == 0 else t(T, "pull_skip", lang))
     run(["git", "fetch", "--prune"])
     gone = cleanable_branches(db, run)
     for b in gone:
         run(["git", "branch", "-D", b])
-    out.append(f"✓ removed merged branch(es): {', '.join(gone)}" if gone else "✓ no merged branches to clean")
+    out.append(t(T, "removed", lang).format(names=", ".join(gone)) if gone else t(T, "none", lang))
     return out
 
 
@@ -74,9 +86,17 @@ def wait_for_merge(pr_ref: str, run=_run, tries: int = 20, delay: float = 15.0, 
     return False
 
 
-def main(argv: list[str] | None = None) -> int:
-    print("\n  emkeel sync")
-    for line in sync():
+def main(argv: list[str] | None = None, inp=input, lang=None) -> int:
+    ap = argparse.ArgumentParser(prog="emkeel sync", description="Post-merge local cleanup.")
+    ap.add_argument("--lang", choices=["es", "en"], default=None)
+    ns = ap.parse_args(argv if argv is not None else None)
+    lang = lang or ns.lang
+    if lang is None:
+        lang = ask_language(inp)
+        if lang is None:
+            return 0
+    print(f"\n  {t(T, 'header', lang)}")
+    for line in sync(lang=lang):
         print("  " + line)
     return 0
 

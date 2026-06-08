@@ -77,7 +77,7 @@ def test_existing_repo_flow(tmp_path, monkeypatch, capsys):
         return _ok()
 
     answers = iter(["y", "y", "me@x.co", "n"])           # protect? secrets? email; finish-adopt? (no)
-    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run) == 0
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run, lang="en") == 0
     joined = "\n".join(ran)
     assert "repo view a/b" in joined                      # checked existence (existing → skip create)
     assert "branches/main/protection" in joined          # set protection
@@ -96,7 +96,7 @@ def test_new_repo_creates_and_pushes(tmp_path, monkeypatch):
         return _fail() if "repo view" in joined else _ok()   # not on GitHub yet
 
     answers = iter(["y", "y", "n", "n"])                  # create+push? protect? secrets?(no) finish-adopt?(no)
-    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run) == 0
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run, lang="en") == 0
     assert any("repo create a/b" in r and "--push" in r for r in ran)   # created + pushed
 
 
@@ -127,7 +127,7 @@ def test_finish_adopt_pushes_pr_and_automerges(tmp_path, monkeypatch):
         return _ok()
 
     answers = iter(["n", "n", "y", "n"])                  # protect?(no) secrets?(no) finish-adopt?(yes) wait-sync?(no)
-    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run) == 0
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run, lang="en") == 0
     joined = "\n".join(ran)
     assert "git push -u origin HEAD" in joined
     assert "pr create --fill" in joined
@@ -148,7 +148,7 @@ def test_finish_adopt_skipped_on_default_branch(tmp_path, monkeypatch):
         return _ok()
 
     answers = iter(["n", "n"])                            # protect?(no) secrets?(no) — NO finish-adopt prompt
-    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run) == 0
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run, lang="en") == 0
     assert not any("pr merge" in r for r in ran)          # no auto-merge offered on the default branch
 
 
@@ -182,5 +182,5 @@ def test_secrets_not_saved_when_jira_login_fails(tmp_path, monkeypatch):
         return _ok()
     # protect?(n) secrets?(y) email, [verify fails] retry?(n)
     answers = iter(["n", "y", "me@x.co", "n"])
-    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "bad", run=run) == 0
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "bad", run=run, lang="en") == 0
     assert not any("secret set JIRA_TOKEN" in r for r in ran)   # never saved the bad creds

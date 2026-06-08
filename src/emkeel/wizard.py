@@ -279,7 +279,7 @@ def _maybe_connect(lang: str, inp) -> None:
     if not connect.gh_ok():
         return
     if inp("\n  " + t("connect_q", lang)).strip().lower() in ("s", "y", "si", "yes"):
-        connect.main([], inp=inp)
+        connect.main([], inp=inp, lang=lang)   # connect speaks the wizard's language
 
 
 if __name__ == "__main__":
