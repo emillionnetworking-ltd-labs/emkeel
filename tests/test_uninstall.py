@@ -123,3 +123,21 @@ def test_eject_nothing_to_remove_is_honest(tmp_path, capsys):
     out = capsys.readouterr().out.lower()
     assert "no local emkeel files" in out
     assert "removed   emkeel.toml" not in out
+
+
+def test_eject_json_canonical(tmp_path):
+    from emkeel.uninstall import eject_json
+    j = eject_json(tmp_path)
+    assert j["engine"] == "emkeel"
+    vals = [s["value"] for s in j["scopes"]]
+    assert vals == ["default", "purge", "all"]
+    # bilingual labels (the AI translates from these — never invents)
+    assert j["scopes"][0]["label"]["es"] and j["scopes"][0]["label"]["en"]
+    assert j["scopes"][2]["flags"] == ["--all", "--yes"]
+
+
+def test_main_json_flag(tmp_path, capsys):
+    import json
+    assert main([str(tmp_path), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["engine"] == "emkeel" and len(data["scopes"]) == 3
