@@ -2,10 +2,18 @@
 
 import subprocess
 
+import pytest
+
 from emkeel.wizard import (
     Answers, _choice, branch_name, derive_defaults, is_existing_repo, main, next_steps,
     plan_lines, run_setup, t,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_connect_offer(monkeypatch):
+    # These tests isolate `setup`; the end-of-wizard connect offer is tested separately.
+    monkeypatch.setattr("emkeel.connect.gh_ok", lambda *a, **k: False)
 
 
 def _git(args, cwd):
@@ -167,3 +175,27 @@ def test_next_steps_new_project_creates_repo():
                 jira_url="https://x", jira_project="ACME")
     ns = next_steps(a)
     assert "gh repo create acme/demo" in ns and "--push" in ns   # new project: create+push first
+
+
+def test_main_offers_connect_when_gh_available(tmp_path, monkeypatch, capsys):
+    # When gh is authed, finishing setup offers to connect (and runs it if accepted).
+    _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("emkeel.connect.gh_ok", lambda *a, **k: True)
+    called = {}
+    monkeypatch.setattr("emkeel.connect.main", lambda argv=None, **kw: called.setdefault("yes", True) or 0)
+    # lang=en, existing, repo⏎,url⏎,proj⏎, key, continue=y, connect-offer=y
+    answers = iter(["2", "1", "", "", "", "SCRUM-9999", "y", "y"])
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert called.get("yes") is True            # connect was invoked from the wizard
+
+
+def test_main_connect_offer_declined(tmp_path, monkeypatch):
+    _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("emkeel.connect.gh_ok", lambda *a, **k: True)
+    called = {}
+    monkeypatch.setattr("emkeel.connect.main", lambda argv=None, **kw: called.setdefault("yes", True) or 0)
+    answers = iter(["2", "1", "", "", "", "SCRUM-9999", "y", "n"])   # decline connect
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert "yes" not in called                   # connect NOT invoked
