@@ -26,6 +26,24 @@ def load_cfg(target: Path) -> Config | None:
     )
 
 
+def wiring_drift(target: Path) -> list[str]:
+    """Generated files whose committed content differs from what the current Emkeel would write
+    (i.e. `emkeel update` would change them). Excludes emkeel.toml (it carries a version stamp that
+    always differs) and the append-only .gitignore/.gitattributes."""
+    cfg = load_cfg(target)
+    if cfg is None:
+        return []
+    from emkeel.init import _files
+    drift = []
+    for path, content in _files(cfg).items():
+        if path == "emkeel.toml":
+            continue
+        p = target / path
+        if p.is_file() and p.read_text(encoding="utf-8") != content:
+            drift.append(path)
+    return drift
+
+
 def main(argv: list[str] | None = None) -> int:
     target = Path(".")
     cfg = load_cfg(target)

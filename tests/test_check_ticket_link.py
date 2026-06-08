@@ -17,3 +17,23 @@ def test_branch_takes_precedence_when_both_present():
 
 def test_returns_none_when_no_key():
     assert find_ticket_key("feature/no-ticket", "just a title") is None
+
+
+def test_gate_warns_on_stale_wiring(tmp_path, monkeypatch, capsys):
+    from emkeel.init import Config, apply
+    from emkeel.gates.check_ticket_link import _warn_if_stale_wiring
+    apply(tmp_path, Config(github_repo="o/r"), force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("old")          # force drift
+    monkeypatch.chdir(tmp_path)
+    _warn_if_stale_wiring()
+    out = capsys.readouterr().out
+    assert "::warning::" in out and "emkeel update" in out
+
+
+def test_gate_silent_when_wiring_current(tmp_path, monkeypatch, capsys):
+    from emkeel.init import Config, apply
+    from emkeel.gates.check_ticket_link import _warn_if_stale_wiring
+    apply(tmp_path, Config(github_repo="o/r"), force=False, dry_run=False)
+    monkeypatch.chdir(tmp_path)
+    _warn_if_stale_wiring()
+    assert "::warning::" not in capsys.readouterr().out
