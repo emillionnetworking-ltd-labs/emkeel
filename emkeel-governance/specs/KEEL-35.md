@@ -17,6 +17,9 @@ and re-running over an already-set-up repo silently scaffolds again.
 - Every menu accepts `c` (cancel → exit cleanly, nothing changed) and Enter (→ first/default option).
 - If `emkeel.toml` already exists, the wizard refuses to run and points to `emkeel eject` (no prompts).
 - Cancelling before the final confirm changes nothing.
+- The scenario answer is cross-checked against reality: "new project" in a repo that already
+  has commits is corrected to "existing" (warned) so it never commits straight to `main`; and
+  "existing" in a folder with no commits is corrected to "new".
 
 ## Anti-regression
 - Tests cover: choice default + cancel, cancel at the first menu (nothing written), existing-install

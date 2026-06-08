@@ -3,7 +3,8 @@
 import subprocess
 
 from emkeel.wizard import (
-    Answers, _choice, branch_name, derive_defaults, main, next_steps, plan_lines, run_setup, t,
+    Answers, _choice, branch_name, derive_defaults, is_existing_repo, main, next_steps,
+    plan_lines, run_setup, t,
 )
 
 
@@ -94,6 +95,29 @@ def test_main_cancel(tmp_path, monkeypatch, capsys):
     assert main(inp=lambda *_: "c") == 0          # cancel at the first menu
     assert not (tmp_path / "emkeel.toml").exists()  # nothing done
     assert "ancel" in capsys.readouterr().out
+
+
+def test_is_existing_repo(tmp_path):
+    assert is_existing_repo(tmp_path) is False        # empty dir, no commits
+    _init_repo(tmp_path)
+    assert is_existing_repo(tmp_path) is True          # has a commit
+
+
+def test_main_new_in_existing_repo_switches_to_existing(tmp_path, monkeypatch, capsys):
+    # The footgun: a real repo, but the user answers "new project".
+    _init_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # lang=en, scenario=NEW(2) → cross-check corrects to existing → repo⏎,url⏎,proj⏎,key,continue
+    answers = iter(["2", "2", "", "", "", "SCRUM-7", "y"])
+    assert main(inp=lambda *_: next(answers)) == 0
+    out = capsys.readouterr().out
+    assert "existing repo" in out                       # warned + switched
+    cur = subprocess.run(["git", "branch", "--show-current"], cwd=tmp_path,
+                         capture_output=True, text=True).stdout.strip()
+    assert cur == "chore/SCRUM-7-adopt-emkeel"          # made a branch, did NOT commit to main
+    # main itself has no emkeel.toml
+    show = subprocess.run(["git", "show", "main:emkeel.toml"], cwd=tmp_path, capture_output=True)
+    assert show.returncode != 0
 
 
 def test_main_detects_existing(tmp_path, monkeypatch, capsys):

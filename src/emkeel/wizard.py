@@ -47,6 +47,10 @@ T: dict[str, dict[str, str]] = {
                         "Para reconfigurar, quítalo primero:  emkeel eject",
                   "en": "Emkeel is already set up here (emkeel.toml exists).\n  "
                         "To reconfigure, remove it first:  emkeel eject"},
+    "warn_isrepo": {"es": "⚠ Este directorio ya es un repo git con historial → lo configuro como repo existente (rama + PR).",
+                    "en": "⚠ This is already a git repo with history → setting it up as an existing repo (branch + PR)."},
+    "warn_norepo": {"es": "⚠ Aún no hay repo git con commits aquí → lo configuro como proyecto nuevo.",
+                    "en": "⚠ No git repo with commits here yet → setting it up as a new project."},
 }
 
 
@@ -85,6 +89,11 @@ def derive_defaults(cwd: Path) -> dict[str, str]:
     if g.returncode == 0 and g.stdout.strip():
         d["jira_url"] = sorted(set(g.stdout.split()))[0]
     return d
+
+
+def is_existing_repo(target: Path) -> bool:
+    """True if `target` is already a git repo with at least one commit."""
+    return _run(["git", "rev-parse", "--verify", "HEAD"], target).returncode == 0
 
 
 def branch_name(key: str) -> str:
@@ -185,6 +194,16 @@ def main(argv: list[str] | None = None, inp=input) -> int:
                          [("existing", t("existing", lang)), ("new", t("new", lang))], inp)
     if a.scenario is None:
         return _cancel(lang)
+
+    # Cross-check the answer against reality (don't trust a wrong answer):
+    # "new" inside a repo with history would commit straight to your branch — correct it.
+    real = is_existing_repo(target)
+    if a.scenario == "new" and real:
+        print("\n  " + t("warn_isrepo", lang))
+        a.scenario = "existing"
+    elif a.scenario == "existing" and not real:
+        print("\n  " + t("warn_norepo", lang))
+        a.scenario = "new"
 
     d = derive_defaults(target)
     print("\n  " + t("detected", lang))
