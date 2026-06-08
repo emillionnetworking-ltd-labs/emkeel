@@ -51,3 +51,45 @@ def test_cli_default_is_dry_run(tmp_path, capsys):
     assert main([str(tmp_path)]) == 0
     assert (tmp_path / "emkeel.toml").exists()  # nothing removed without --yes
     assert "dry-run" in capsys.readouterr().out
+
+
+def test_repo_from_git():
+    from types import SimpleNamespace
+    from emkeel.uninstall import repo_from_git
+
+    def run(args, timeout=None):
+        return SimpleNamespace(returncode=0, stdout="git@github.com:acme/web.git\n", stderr="")
+
+    assert repo_from_git(__import__("pathlib").Path("."), run=run) == "acme/web"
+
+
+def test_remote_cleanup_runs_expected_commands():
+    from types import SimpleNamespace
+    from emkeel.uninstall import remote_cleanup
+    ran = []
+
+    def run(args, timeout=None):
+        ran.append(" ".join(args))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    steps = remote_cleanup("acme/web", "main", ["emkeel.toml", "AGENTS.md"], run=run)
+    joined = "\n".join(ran)
+    assert "api -X DELETE repos/acme/web/branches/main/protection" in joined   # drop protection
+    assert "git add emkeel.toml AGENTS.md" in joined                            # stage only our deletions
+    assert "commit" in joined and "git push" in joined                          # commit + push
+    assert "secret delete JIRA_TOKEN --repo acme/web" in joined                 # drop secrets
+    assert any(label == "push" and ok for label, ok in steps)
+
+
+def test_remote_cleanup_handles_push_timeout():
+    import subprocess
+    from emkeel.uninstall import remote_cleanup
+
+    def run(args, timeout=None):
+        from types import SimpleNamespace
+        if args[:2] == ["git", "push"]:
+            raise subprocess.TimeoutExpired(cmd="git push", timeout=180)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    steps = remote_cleanup("acme/web", "main", ["emkeel.toml"], run=run)
+    assert any("timed out" in label for label, _ in steps)
