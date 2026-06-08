@@ -79,7 +79,7 @@ def test_repo_from_git():
     from types import SimpleNamespace
     from emkeel.uninstall import repo_from_git
 
-    def run(args, timeout=None):
+    def run(args, timeout=None, capture=True):
         return SimpleNamespace(returncode=0, stdout="git@github.com:acme/web.git\n", stderr="")
 
     assert repo_from_git(__import__("pathlib").Path("."), run=run) == "acme/web"
@@ -90,7 +90,7 @@ def test_remote_cleanup_runs_expected_commands():
     from emkeel.uninstall import remote_cleanup
     ran = []
 
-    def run(args, timeout=None):
+    def run(args, timeout=None, capture=True):
         ran.append(" ".join(args))
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -107,7 +107,7 @@ def test_remote_cleanup_handles_push_timeout():
     import subprocess
     from emkeel.uninstall import remote_cleanup
 
-    def run(args, timeout=None):
+    def run(args, timeout=None, capture=True):
         from types import SimpleNamespace
         if args[:2] == ["git", "push"]:
             raise subprocess.TimeoutExpired(cmd="git push", timeout=180)

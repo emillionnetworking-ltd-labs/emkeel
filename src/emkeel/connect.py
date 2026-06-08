@@ -24,8 +24,11 @@ from pathlib import Path
 TOKEN_LINK = "https://id.atlassian.net/manage-profile/security/api-tokens"
 
 
-def _run(args: list[str], stdin: str | None = None, timeout: float | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, input=stdin, timeout=timeout)
+def _run(args: list[str], stdin: str | None = None, timeout: float | None = None,
+         capture: bool = True) -> subprocess.CompletedProcess:
+    if capture:
+        return subprocess.run(args, capture_output=True, text=True, input=stdin, timeout=timeout)
+    return subprocess.run(args, text=True, timeout=timeout)   # inherit the terminal (prompts/hooks visible)
 
 
 def _yes(s: str) -> bool:
@@ -87,12 +90,15 @@ def current_branch(run=_run) -> str:
 
 
 def do_push(run=_run):
-    """Push HEAD with a timeout — a pre-push hook can hang, so we bail to a manual fallback."""
+    """Push HEAD inheriting the terminal, so a pre-push hook / SSH passphrase / credential prompt
+    is visible and answerable (capturing it would hang silently). Ctrl-C cancels cleanly."""
     try:
-        r = run(["git", "push", "-u", "origin", "HEAD"], timeout=180)
+        r = run(["git", "push", "-u", "origin", "HEAD"], capture=False)
     except subprocess.TimeoutExpired:
         return False, "timed out (a pre-push hook may be hanging)"
-    return r.returncode == 0, (r.stderr or r.stdout).strip()
+    except KeyboardInterrupt:
+        return False, "cancelled (Ctrl-C)"
+    return r.returncode == 0, (getattr(r, "stderr", "") or "").strip()
 
 
 def do_pr_create(run=_run):
@@ -162,6 +168,7 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
     if cur and cur != branch:
         ans = inp(f"  Finish the adopt — push '{cur}', open a PR and auto-merge when gates pass? [y/N] ").strip().lower()
         if ans in ("y", "yes", "s", "si"):
+            print("  Pushing… (you'll see git's output; a pre-push hook may take a moment — Ctrl-C to skip)")
             ok, msg = do_push(run)
             if not ok:
                 print(f"  ✗ push: {msg}")

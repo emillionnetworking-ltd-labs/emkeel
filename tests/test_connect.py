@@ -110,7 +110,7 @@ def test_finish_adopt_pushes_pr_and_automerges(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     ran = []
 
-    def run(args, stdin=None, timeout=None):
+    def run(args, stdin=None, timeout=None, capture=True):
         joined = " ".join(args)
         ran.append(joined)
         if "rev-parse" in joined:
@@ -130,7 +130,7 @@ def test_finish_adopt_skipped_on_default_branch(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     ran = []
 
-    def run(args, stdin=None, timeout=None):
+    def run(args, stdin=None, timeout=None, capture=True):
         joined = " ".join(args)
         ran.append(joined)
         if "rev-parse" in joined:
