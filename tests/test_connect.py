@@ -2,9 +2,18 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from emkeel.connect import (
-    allow_auto_merge, current_branch, do_push, gh_ok, load_config, main, protection_body, repo_exists,
+    allow_auto_merge, current_branch, do_push, gh_ok, load_config, main, protection_body,
+    repo_exists, verify_jira,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stub_jira_verify(monkeypatch):
+    # connect now verifies Jira creds before saving; stub the network call so tests stay offline.
+    monkeypatch.setattr("emkeel.connect._jira_fetch", lambda b, e, t: (True, "tester"))
 
 
 def _ok(stdout="ok"):
@@ -147,3 +156,31 @@ def test_allow_auto_merge_patches_repo():
     calls = []
     allow_auto_merge("a/b", run=lambda args, **k: calls.append(" ".join(args)) or _ok())
     assert "api -X PATCH repos/a/b -F allow_auto_merge=true" in calls[0]
+
+
+def test_verify_jira_valid():
+    ok, detail = verify_jira("https://x.atlassian.net", "me@x.co", "tok",
+                             fetch=lambda b, e, t: (True, "Ada Lovelace"))
+    assert ok is True and detail == "Ada Lovelace"
+
+
+def test_verify_jira_invalid():
+    ok, detail = verify_jira("https://x.atlassian.net", "me@x.co", "bad",
+                             fetch=lambda b, e, t: (False, "HTTP 401"))
+    assert ok is False and "401" in detail
+
+
+def test_secrets_not_saved_when_jira_login_fails(tmp_path, monkeypatch):
+    _toml(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("emkeel.connect._jira_fetch", lambda b, e, t: (False, "HTTP 401"))
+    ran = []
+    def run(args, stdin=None, timeout=None, capture=True):
+        ran.append(" ".join(args))
+        if "rev-parse" in " ".join(args):
+            return SimpleNamespace(returncode=0, stdout="main", stderr="")  # on default → no finish-adopt
+        return _ok()
+    # protect?(n) secrets?(y) email, [verify fails] retry?(n)
+    answers = iter(["n", "y", "me@x.co", "n"])
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "bad", run=run) == 0
+    assert not any("secret set JIRA_TOKEN" in r for r in ran)   # never saved the bad creds
