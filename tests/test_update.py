@@ -26,7 +26,7 @@ def test_update_refreshes_stale_wiring(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert main([]) == 0
     agents = (tmp_path / "AGENTS.md").read_text()
-    assert "emkeel onboard" in agents                       # refreshed to the current template
+    assert "Rules that matter live in CI" in agents and "no rule here" not in agents  # refreshed to current template
     assert (tmp_path / "emkeel-governance" / "specs" / "MINE.md").read_text() == "my spec"  # artifacts untouched
 
 

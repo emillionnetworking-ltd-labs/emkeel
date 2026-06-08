@@ -1,11 +1,10 @@
 """emkeel command-line interface.
 
 Subcommands:
-  emkeel setup           interactive setup wizard (no AI — asks a few questions, does the work)
-  emkeel init [opts]     scaffold a repo for Emkeel governance (non-interactive, for scripts/AI)
-  emkeel onboard         print the AI-assisted onboarding playbook (paste it to your agent)
+  emkeel setup           interactive setup wizard — asks a few questions, does the work
+  emkeel init [opts]     scaffold a repo for Emkeel governance (non-interactive, for scripts)
   emkeel review <KEY>    print a per-criterion review template for a ticket
-  emkeel eject           reverse `emkeel init` in this repo (alias: uninstall; dry-run unless --yes)
+  emkeel eject           reverse `emkeel init` in this repo (alias: uninstall; interactive)
   emkeel doctor          check what's set up and what's still pending (with fix links)
   emkeel connect         automate the GitHub side via gh (branch protection, secrets; new repo: create+push)
   emkeel sync            after the adopt PR merges: checkout default + pull + delete the merged branch
@@ -16,20 +15,8 @@ Subcommands:
 from __future__ import annotations
 
 import sys
-from importlib import resources
 
-_USAGE = "usage: emkeel <setup|init|onboard|review|eject|doctor|connect|sync|update|version> [args]   (try: emkeel setup)"
-
-
-def _onboard() -> int:
-    text = resources.files("emkeel").joinpath("_docs/onboarding.md").read_text(encoding="utf-8")
-    print("# ── Paste everything below to your AI coding agent (Claude Code, Cursor, Copilot, ...).")
-    print("# It will ask you for your GitHub repo, Jira URL and project key, then set Emkeel")
-    print("# up step by step — in your language. (Or just follow it yourself.)")
-    print("# " + "─" * 76)
-    print()
-    print(text)
-    return 0
+_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|version> [args]   (try: emkeel setup)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -62,8 +49,6 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "review":
         from emkeel.review import main as review_main
         return review_main(rest)
-    if cmd == "onboard":
-        return _onboard()
     if cmd in ("eject", "uninstall"):  # uninstall = backward-compat alias
         from emkeel.uninstall import main as eject_main
         return eject_main(rest)

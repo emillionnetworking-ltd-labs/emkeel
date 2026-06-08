@@ -12,16 +12,6 @@ def test_unknown_command(capsys):
     assert main(["bogus"]) == 2
     assert "unknown command" in capsys.readouterr().err
 
-
-def test_onboard_prints_playbook(capsys):
-    assert main(["onboard"]) == 0
-    out = capsys.readouterr().out
-    assert "paste" in out.lower()        # the human "paste to your agent" header
-    assert "onboarding" in out.lower()   # the playbook content
-    assert "setup --json" in out          # relays canonical questions, doesn't invent them
-    assert "eject" in out                 # covers the removal flow too
-
-
 def test_init_dispatch(tmp_path):
     assert main(["init", str(tmp_path), "--dry-run"]) == 0
 

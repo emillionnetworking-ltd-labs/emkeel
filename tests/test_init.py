@@ -26,13 +26,6 @@ def test_claude_md_imports_agents(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     assert "@AGENTS.md" in (tmp_path / "CLAUDE.md").read_text()
 
-
-def test_agents_md_routes_emkeel_ops_through_onboard(tmp_path):
-    apply(tmp_path, CFG, force=False, dry_run=False)
-    agents = (tmp_path / "AGENTS.md").read_text()
-    assert "emkeel onboard" in agents and "single entry point" in agents
-
-
 def test_plan_is_non_clobbering(tmp_path):
     (tmp_path / "AGENTS.md").write_text("my existing contract")
     k = _kinds(plan(tmp_path, CFG, force=False))

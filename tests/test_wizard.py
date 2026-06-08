@@ -6,7 +6,7 @@ import pytest
 
 from emkeel.wizard import (
     Answers, _choice, branch_name, derive_defaults, is_existing_repo, main, next_steps,
-    plan_lines, questions_json, run_setup, t,
+    plan_lines, run_setup, t,
 )
 
 
@@ -220,25 +220,3 @@ def test_main_branch_exists_offers_reuse(tmp_path, monkeypatch):
     answers = iter(["2", "1", "", "", "", "", "2", "y"])
     assert main(inp=lambda *_: next(answers)) == 0
     assert _branch(tmp_path) == "chore/SCRUM-1-adopt-emkeel"   # reused the existing branch
-
-
-def test_questions_json_canonical(tmp_path):
-    _init_repo(tmp_path)
-    q = questions_json(tmp_path)
-    assert q["engine"] == "emkeel"
-    ids = [x["id"] for x in q["questions"]]
-    assert ids == ["language", "scenario", "github_repo", "jira_url", "jira_project", "jira_key"]
-    assert q["derived"]["github_repo"] == "acme/web"
-    assert q["derived"]["is_existing_repo"] is True
-    assert "emkeel init" in q["apply"]
-    # questions carry bilingual prompts (the AI translates from these — never invents)
-    assert q["questions"][1]["prompt"]["es"] and q["questions"][1]["prompt"]["en"]
-
-
-def test_main_json_flag(tmp_path, monkeypatch, capsys):
-    import json
-    _init_repo(tmp_path)
-    monkeypatch.chdir(tmp_path)
-    assert main(["--json"]) == 0                 # non-interactive: no prompts
-    data = json.loads(capsys.readouterr().out)
-    assert data["engine"] == "emkeel" and "questions" in data and "after" in data

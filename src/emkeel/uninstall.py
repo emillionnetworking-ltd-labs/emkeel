@@ -154,35 +154,6 @@ def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run, l
     return steps
 
 
-def eject_json(target: Path) -> dict:
-    """Canonical eject scopes (bilingual) for an AI front-end to present — so it relays these
-    exact options (in the user's language) instead of inventing its own."""
-    from emkeel import __version__
-    gov = (target / GOVERNANCE_DIR).is_dir()
-    governed = any((target / f).is_file() for f in WIRING_FILES) or gov
-    return {
-        "engine": "emkeel",
-        "version": __version__,
-        "present": {"governed": governed, "governance_dir": gov},
-        "scopes": [
-            {"value": "default", "flags": ["--yes"],
-             "label": {"es": "Por defecto (conserva artefactos)", "en": "Default (keep artifacts)"},
-             "desc": {"es": "Quita el cableado (workflows, emkeel.toml, AGENTS/CLAUDE, .env.example, .gitattributes). Conserva emkeel-governance/. Sin cambios en GitHub.",
-                      "en": "Remove the wiring (workflows, emkeel.toml, AGENTS/CLAUDE, .env.example, .gitattributes). Keeps emkeel-governance/. No GitHub-side changes."}},
-            {"value": "purge", "flags": ["--purge", "--yes"],
-             "label": {"es": "Purge (borra también artefactos)", "en": "Purge (also delete artifacts)"},
-             "desc": {"es": "Todo lo de Default, MÁS borra emkeel-governance/ (specs/ADR/records). Solo local.",
-                      "en": "Everything in Default, PLUS delete the entire emkeel-governance/ directory (your specs, ADRs, records). Local only."}},
-            {"value": "all", "flags": ["--all", "--yes"],
-             "label": {"es": "Todo (incl. lado GitHub)", "en": "All (incl. GitHub side)"},
-             "desc": {"es": "Cableado + artefactos governance + lado GitHub: quita branch protection y secrets en el remoto. Externo y difícil de revertir.",
-                      "en": "Wiring + governance artifacts + GitHub side: removes branch protection and secrets on the remote. Outward-facing and hard to reverse."}},
-        ],
-        "apply": "emkeel eject <flags>",
-        "after": ["then `pipx uninstall emkeel` to remove the tool — order: eject first; uninstalling the tool ≠ un-governing the repo"],
-    }
-
-
 def _do_eject(target: Path, purge: bool, remote: bool, lang: str) -> int:
     actions = apply_uninstall(target, purge, dry_run=False)
     removed = [a for a in actions if a.kind in ("remove", "remove-dir")]
@@ -219,14 +190,9 @@ def main(argv: list[str] | None = None, inp=input, lang=None) -> int:
     ap.add_argument("--all", action="store_true", help="wiring + governance + GitHub side")
     ap.add_argument("--yes", action="store_true", help="apply without prompts (for scripts/CI)")
     ap.add_argument("--dry-run", action="store_true", help="preview only, change nothing")
-    ap.add_argument("--json", action="store_true", help="print canonical eject scopes (for an AI front-end)")
     ap.add_argument("--lang", choices=["es", "en"], default=None)
     ns = ap.parse_args(argv)
     target = Path(ns.path)
-    if ns.json:
-        import json
-        print(json.dumps(eject_json(target), ensure_ascii=False, indent=2))
-        return 0
     purge, remote = ns.purge or ns.all, ns.remote or ns.all
     lang = lang or ns.lang
 
