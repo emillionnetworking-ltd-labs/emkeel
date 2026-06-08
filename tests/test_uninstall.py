@@ -46,11 +46,33 @@ def test_dry_run_changes_nothing(tmp_path):
     assert (tmp_path / "emkeel-governance").is_dir()
 
 
-def test_cli_default_is_dry_run(tmp_path, capsys):
+def test_cli_dry_run_changes_nothing(tmp_path, capsys):
     _governed(tmp_path)
-    assert main([str(tmp_path)]) == 0
-    assert (tmp_path / "emkeel.toml").exists()  # nothing removed without --yes
+    assert main([str(tmp_path), "--dry-run"]) == 0
+    assert (tmp_path / "emkeel.toml").exists()  # nothing removed
     assert "dry-run" in capsys.readouterr().out
+
+
+def test_interactive_eject_wiring_plus_governance(tmp_path):
+    _governed(tmp_path)
+    # wiring? Y · governance? y · GitHub side? n · proceed? y
+    answers = iter(["y", "y", "n", "y"])
+    assert main([str(tmp_path)], inp=lambda *_: next(answers)) == 0
+    assert not (tmp_path / "emkeel.toml").exists()
+    assert not (tmp_path / "emkeel-governance").exists()   # purge confirmed interactively
+
+
+def test_interactive_eject_final_confirm_cancels(tmp_path):
+    _governed(tmp_path)
+    answers = iter(["y", "n", "n", "n"])   # wiring y, gov n, remote n, PROCEED -> no
+    assert main([str(tmp_path)], inp=lambda *_: next(answers)) == 0
+    assert (tmp_path / "emkeel.toml").exists()             # cancelled → nothing removed
+
+
+def test_interactive_eject_decline_wiring_aborts(tmp_path):
+    _governed(tmp_path)
+    assert main([str(tmp_path)], inp=lambda *_: "n") == 0  # decline at the first question
+    assert (tmp_path / "emkeel.toml").exists()
 
 
 def test_repo_from_git():

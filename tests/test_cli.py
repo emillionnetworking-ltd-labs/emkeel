@@ -30,6 +30,7 @@ def test_review_dispatch_returns_usage_without_key():
 
 
 def test_eject_and_uninstall_alias(tmp_path):
-    # `eject` is the command; `uninstall` is the backward-compat alias. Both dry-run by default.
-    assert main(["eject", str(tmp_path)]) == 0
-    assert main(["uninstall", str(tmp_path)]) == 0
+    # `eject` is the command; `uninstall` is the backward-compat alias (eject is interactive
+    # by default now, so use --dry-run here to test the dispatch without prompting).
+    assert main(["eject", str(tmp_path), "--dry-run"]) == 0
+    assert main(["uninstall", str(tmp_path), "--dry-run"]) == 0
