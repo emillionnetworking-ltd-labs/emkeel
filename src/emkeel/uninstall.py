@@ -73,8 +73,10 @@ def apply_uninstall(target: Path, purge: bool, dry_run: bool) -> list[Action]:
     return actions
 
 
-def _run(args: list[str], timeout: float | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+def _run(args: list[str], timeout: float | None = None, capture: bool = True) -> subprocess.CompletedProcess:
+    if capture:
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(args, text=True, timeout=timeout)   # inherit the terminal
 
 
 def repo_from_git(target: Path, run=_run) -> str:
@@ -98,10 +100,13 @@ def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run) -
         c = run(["git", "commit", "-m", "chore(emkeel): remove governance (eject)"])
         steps.append(("commit removal", c.returncode == 0))
         try:
-            p = run(["git", "push"], timeout=180)
+            print("  Pushing the removal… (git output below; Ctrl-C to skip)")
+            p = run(["git", "push"], capture=False)
             steps.append(("push" if p.returncode == 0 else "push FAILED — do it manually: git push", p.returncode == 0))
         except subprocess.TimeoutExpired:
             steps.append(("push timed out (hook?) — do it manually: git push", False))
+        except KeyboardInterrupt:
+            steps.append(("push cancelled — do it manually: git push", False))
     for name in ("JIRA_TOKEN", "JIRA_EMAIL", "JIRA_BASE_URL"):
         run(["gh", "secret", "delete", name, "--repo", repo])
     steps.append(("Jira secrets removed", True))
