@@ -6,6 +6,7 @@ Subcommands:
   emkeel onboard         print the AI-assisted onboarding playbook (paste it to your agent)
   emkeel review <KEY>    print a per-criterion review template for a ticket
   emkeel eject           reverse `emkeel init` in this repo (alias: uninstall; dry-run unless --yes)
+  emkeel doctor          check what's set up and what's still pending (with fix links)
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 import sys
 from importlib import resources
 
-_USAGE = "usage: emkeel <setup|init|onboard|review|eject|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|onboard|review|eject|doctor|version> [args]   (try: emkeel setup)"
 
 
 def _onboard() -> int:
@@ -37,6 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "setup":
         from emkeel.wizard import main as wizard_main
         return wizard_main(rest)
+    if cmd == "doctor":
+        from emkeel.doctor import main as doctor_main
+        return doctor_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)
