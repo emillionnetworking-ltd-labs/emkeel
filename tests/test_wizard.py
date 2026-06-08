@@ -86,6 +86,9 @@ def test_run_setup_new(tmp_path, monkeypatch):
     a = Answers(scenario="new", github_repo="acme/new", jira_url="https://x", jira_project="ACME")
     run_setup(tmp_path, a)
     assert (tmp_path / ".git").exists() and (tmp_path / "emkeel.toml").is_file()
+    cur = subprocess.run(["git", "branch", "--show-current"], cwd=tmp_path,
+                         capture_output=True, text=True).stdout.strip()
+    assert cur == "main"          # new repos default to main, not master
 
 
 def test_main_smoke(tmp_path, monkeypatch, capsys):
@@ -157,7 +160,7 @@ def test_main_existing_no_repo_asks_then_creates(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     for k in ("AUTHOR", "COMMITTER"):
         monkeypatch.setenv(f"GIT_{k}_NAME", "t"); monkeypatch.setenv(f"GIT_{k}_EMAIL", "t@t.co")
-    answers = iter(["2", "1", "1", "", "", "", "y"])   # en, existing, create-new, fields⏎, continue
+    answers = iter(["2", "1", "1", "acme/app", "", "", "y"])   # en, existing, create-new, repo, url⏎, proj⏎, continue
     assert main(inp=lambda *_: next(answers)) == 0
     assert "right folder" in capsys.readouterr().out            # informed
     assert (tmp_path / ".git").exists() and (tmp_path / "emkeel.toml").is_file()
@@ -220,3 +223,15 @@ def test_main_branch_exists_offers_reuse(tmp_path, monkeypatch):
     answers = iter(["2", "1", "", "", "", "", "2", "y"])
     assert main(inp=lambda *_: next(answers)) == 0
     assert _branch(tmp_path) == "chore/SCRUM-1-adopt-emkeel"   # reused the existing branch
+
+
+def test_main_rejects_repo_without_owner(tmp_path, monkeypatch, capsys):
+    # New project: a bare repo name (no owner) is re-asked until owner/repo.
+    monkeypatch.chdir(tmp_path)
+    for k in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{k}_NAME", "t"); monkeypatch.setenv(f"GIT_{k}_EMAIL", "t@t.co")
+    # en, new, repo="badname"(invalid) → repo="acme/app"(ok), url⏎, proj⏎, continue=y
+    answers = iter(["2", "2", "badname", "acme/app", "https://x.atlassian.net", "ACME", "y"])
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert "owner/repo" in capsys.readouterr().out          # warned about the format
+    assert 'repo = "acme/app"' in (tmp_path / "emkeel.toml").read_text()

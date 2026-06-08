@@ -27,6 +27,8 @@ T: dict[str, dict[str, str]] = {
     "detected":  {"es": "Datos (Enter = aceptar, o escribe para cambiar):",
                   "en": "Details (Enter = accept, or type to change):"},
     "ghrepo":    {"es": "Repo de GitHub (owner/repo)", "en": "GitHub repo (owner/repo)"},
+    "repo_fmt":  {"es": "⚠ Usa el formato owner/repo (ej. tu-usuario/mi-app).",
+                  "en": "⚠ Use the owner/repo format (e.g. your-user/my-app)."},
     "jiraurl":   {"es": "URL de Jira", "en": "Jira URL"},
     "jiraproj":  {"es": "Proyecto Jira (clave)", "en": "Jira project (key)"},
     "jirakey":   {"es": "Clave Jira para la rama (ej. SCRUM-123)", "en": "Jira key for the branch (e.g. SCRUM-123)"},
@@ -137,7 +139,10 @@ def run_setup(target: Path, a: Answers) -> list[str]:
             r = _run(["git", "init", "-q"], target)
             if r.returncode != 0:
                 raise RuntimeError(f"git init: {r.stderr.strip()}")
-            out.append("✓ git init")
+            # Force the default branch to 'main' (older git defaults to 'master', which then
+            # mismatches branch protection + GitHub's default). symbolic-ref works on any git.
+            _run(["git", "symbolic-ref", "HEAD", "refs/heads/main"], target)
+            out.append("✓ git init (main)")
     else:
         br = branch_name(a.jira_key)
         args = ["git", "checkout", br] if a.reuse_branch else ["git", "checkout", "-b", br]
@@ -238,6 +243,10 @@ def main(argv: list[str] | None = None, inp=input) -> int:
     d = derive_defaults(target)
     print("\n  " + t("detected", lang))
     a.github_repo = _field(t("ghrepo", lang), d["github_repo"], inp)
+    # Must be owner/repo — a bare name breaks the links + the gh API calls (404).
+    while not re.fullmatch(r"[^/\s]+/[^/\s]+", a.github_repo or ""):
+        print("  " + t("repo_fmt", lang))
+        a.github_repo = _field(t("ghrepo", lang), d["github_repo"], inp)
     a.jira_url = _field(t("jiraurl", lang), d["jira_url"], inp)
     a.jira_project = _field(t("jiraproj", lang), d["jira_project"], inp)
     if a.scenario == "existing":
