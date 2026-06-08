@@ -16,6 +16,17 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(args, capture_output=True, text=True)
 
 
+def _gates_required(repo: str, branch: str, run=_run) -> bool:
+    """True if the 'gates' check is required on `branch` — via classic protection OR a ruleset."""
+    classic = run(["gh", "api", f"repos/{repo}/branches/{branch}/protection",
+                   "--jq", ".required_status_checks.contexts"])
+    if classic.returncode == 0 and "gates" in classic.stdout:
+        return True
+    rules = run(["gh", "api", f"repos/{repo}/rules/branches/{branch}",
+                 "--jq", '[.[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context]'])
+    return rules.returncode == 0 and "gates" in rules.stdout
+
+
 def gather(target: Path) -> dict:
     """Inspect repo + GitHub state. gh-dependent checks stay None when they can't be determined."""
     st = {"governed": (target / "emkeel.toml").is_file(), "repo": "", "connected": False,
@@ -36,9 +47,7 @@ def gather(target: Path) -> dict:
     sl = _run(["gh", "secret", "list", "--repo", st["repo"]])
     if sl.returncode == 0:
         st["secrets_ok"] = all(k in sl.stdout for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"))
-    pr = _run(["gh", "api", f"repos/{st['repo']}/branches/{st['default_branch']}/protection",
-               "--jq", ".required_status_checks.contexts"])
-    st["protection_ok"] = (pr.returncode == 0 and "gates" in pr.stdout)
+    st["protection_ok"] = _gates_required(st["repo"], st["default_branch"])
     return st
 
 
