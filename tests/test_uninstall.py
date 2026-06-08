@@ -115,3 +115,11 @@ def test_remote_cleanup_handles_push_timeout():
 
     steps = remote_cleanup("acme/web", "main", ["emkeel.toml"], run=run)
     assert any("timed out" in label for label, _ in steps)
+
+
+def test_eject_nothing_to_remove_is_honest(tmp_path, capsys):
+    # Not governed → don't pretend to remove things.
+    assert main([str(tmp_path), "--yes"]) == 0
+    out = capsys.readouterr().out.lower()
+    assert "no local emkeel files" in out
+    assert "removed   emkeel.toml" not in out
