@@ -16,7 +16,7 @@ protection), out of the agent's reach.
 | **GitHub CLI `gh`**, authenticated | https://cli.github.com → then run `gh auth login` | also sets up your `git push`/`pull` auth (SSH or HTTPS) — no separate SSH setup needed |
 | **Jira Cloud account** | https://www.atlassian.com/software/jira | your tickets live here |
 | **Jira API token** | https://id.atlassian.net/manage-profile/security/api-tokens | you paste it into a hidden prompt; Emkeel verifies it before saving |
-| **Python 3.11+** | https://www.python.org/downloads | Emkeel has zero other deps |
+| **Python 3.11+** | https://www.python.org/downloads *(Windows: tick "Add python.exe to PATH"; or `winget install Python.Python.3.12`)* | Emkeel has zero other deps |
 
 ## 1. Install Emkeel (per platform)
 
@@ -24,12 +24,18 @@ protection), out of the agent's reach.
 
 | Platform | Command |
 | --- | --- |
-| **Windows** | `py -m pip install --user pipx` → `py -m pipx ensurepath` → `pipx install emkeel` |
+| **Windows** | `py -m pip install --user pipx` → `py -m pipx ensurepath` → `py -m pipx install emkeel` |
 | **macOS** | `brew install pipx` → `pipx install emkeel` |
 | **Linux** (admin/sudo) | `sudo apt install pipx` → `pipx install emkeel` |
 | **Linux/server, no sudo** | `pip install --user --break-system-packages emkeel` *(safe — zero deps)* |
 
 Confirm: `emkeel version`.
+
+> **Windows notes** (save yourself the headaches):
+> - Use **`py -m pipx …`** (not bare `pipx`) — it works even before `pipx` lands on your PATH.
+> - After installing Python or running `ensurepath`, **open a new terminal** — and in VS Code, **fully
+>   restart the app** (its terminal caches the PATH from launch). Then `emkeel version`.
+> - No Python yet? `py`/`python` "not recognized" means it isn't installed — do the prerequisite first.
 
 ## 2. Set up your repo
 
