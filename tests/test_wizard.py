@@ -142,3 +142,21 @@ def test_main_detects_existing(tmp_path, monkeypatch, capsys):
         raise AssertionError("should not prompt when already set up")
     assert main(inp=_boom) == 0
     assert "already set up" in capsys.readouterr().out
+
+
+def test_main_existing_no_repo_asks_then_creates(tmp_path, monkeypatch, capsys):
+    # "existing" answered but there's no repo → wizard asks; user creates new here.
+    monkeypatch.chdir(tmp_path)
+    for k in ("AUTHOR", "COMMITTER"):
+        monkeypatch.setenv(f"GIT_{k}_NAME", "t"); monkeypatch.setenv(f"GIT_{k}_EMAIL", "t@t.co")
+    answers = iter(["2", "1", "1", "", "", "", "y"])   # en, existing, create-new, fields⏎, continue
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert "right folder" in capsys.readouterr().out            # informed
+    assert (tmp_path / ".git").exists() and (tmp_path / "emkeel.toml").is_file()
+
+
+def test_main_existing_no_repo_cancel(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    answers = iter(["2", "1", "c"])                    # en, existing, then cancel
+    assert main(inp=lambda *_: next(answers)) == 0
+    assert not (tmp_path / ".git").exists() and not (tmp_path / "emkeel.toml").exists()

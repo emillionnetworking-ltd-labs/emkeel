@@ -53,8 +53,10 @@ T: dict[str, dict[str, str]] = {
                       "en": "Existing repo (branch + PR) — recommended"},
     "opt_new_risky": {"es": "Proyecto nuevo (commiteará a tu rama actual)",
                       "en": "New project (will commit to your current branch)"},
-    "warn_norepo":   {"es": "⚠ Aún no hay repo git con commits aquí → lo configuro como proyecto nuevo.",
-                      "en": "⚠ No git repo with commits here yet → setting it up as a new project."},
+    "warn_norepo_q": {"es": "⚠ No hay un repo git con commits aquí. ¿Estás en la carpeta correcta?",
+                      "en": "⚠ There's no git repo with commits here. Are you in the right folder?"},
+    "opt_make_new":  {"es": "Crear un proyecto nuevo aquí (git init)",
+                      "en": "Create a new project here (git init)"},
 }
 
 
@@ -210,7 +212,11 @@ def main(argv: list[str] | None = None, inp=input) -> int:
             return _cancel(lang)
         a.scenario = choice
     elif a.scenario == "existing" and not real:
-        print("\n  " + t("warn_norepo", lang))   # no repo here → only "new" makes sense
+        # No repo here — maybe the wrong folder. Inform + let them create-new or cancel.
+        print("\n  " + t("warn_norepo_q", lang))
+        choice = _choice("", [("new", t("opt_make_new", lang))], inp)
+        if choice is None:
+            return _cancel(lang)
         a.scenario = "new"
 
     d = derive_defaults(target)
