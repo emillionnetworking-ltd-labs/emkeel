@@ -106,6 +106,11 @@ def do_pr_create(run=_run):
     return r.returncode == 0, (r.stdout or r.stderr).strip()
 
 
+def allow_auto_merge(repo: str, run=_run) -> bool:
+    """Turn on the repo's 'Allow auto-merge' setting (required before `gh pr merge --auto`)."""
+    return run(["gh", "api", "-X", "PATCH", f"repos/{repo}", "-F", "allow_auto_merge=true"]).returncode == 0
+
+
 def do_auto_merge(run=_run):
     """Enable GitHub's native auto-merge: merges WHEN required checks pass (gates) + approvals met."""
     r = run(["gh", "pr", "merge", "--auto", "--squash"])
@@ -178,9 +183,11 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
                 okp, out = do_pr_create(run)
                 print(f"  ✓ PR opened — {out}" if okp else f"  ✗ gh pr create: {out}")
                 if okp:
+                    allow_auto_merge(repo, run)      # repo setting must be on for --auto to work
                     okm, outm = do_auto_merge(run)
                     print("  ✓ auto-merge on — merges when the gates pass" if okm
-                          else f"  ⚠ auto-merge: {outm}\n     (gates failed? fix + push again; or merge it yourself once green)")
+                          else f"  ⚠ auto-merge: {outm}\n     The PR is open — merge it once the gates are green,"
+                               " or enable 'Allow auto-merge' in repo Settings and re-run `gh pr merge --auto`.")
 
     print("\n  Done. Check with: emkeel doctor")
     return 0
