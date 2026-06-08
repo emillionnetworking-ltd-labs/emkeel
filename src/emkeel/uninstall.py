@@ -108,33 +108,19 @@ def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run) -
     return steps
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(
-        prog="emkeel eject",
-        description="Reverse `emkeel init` in this repo (keeps emkeel-governance/ unless --purge).",
-    )
-    ap.add_argument("path", nargs="?", default=".")
-    ap.add_argument("--purge", action="store_true", help="also delete emkeel-governance/ (your artifacts)")
-    ap.add_argument("--yes", action="store_true", help="actually remove (default is a dry-run preview)")
-    ap.add_argument("--remote", action="store_true",
-                    help="also finish on GitHub: drop branch protection, commit+push the removal, drop Jira secrets")
-    ns = ap.parse_args(argv)
-    target = Path(ns.path)
-    dry = not ns.yes
+def _ask(inp, prompt: str, default: bool) -> bool:
+    a = inp(prompt).strip().lower()
+    return default if a == "" else a in ("y", "yes", "s", "si")
 
-    actions = apply_uninstall(target, ns.purge, dry_run=dry)
-    print(f"emkeel eject [{'dry-run' if dry else 'removed'}] -> {target}")
+
+def _do_eject(target: Path, purge: bool, remote: bool) -> int:
+    actions = apply_uninstall(target, purge, dry_run=False)
+    print(f"\nemkeel eject [removed] -> {target}")
     for a in actions:
         print(f"  {a.kind:11} {a.path}")
-    if dry:
-        print("\n(nothing changed — pass --yes to apply)")
-        if ns.remote:
-            print("--remote would also: drop branch protection, commit+push the removal, drop Jira secrets.")
-        return 0
-    if not ns.purge and (target / GOVERNANCE_DIR).is_dir():
-        print(f"\nKept {GOVERNANCE_DIR}/ (your history). Use --purge to delete it too.")
-
-    if ns.remote:
+    if not purge and (target / GOVERNANCE_DIR).is_dir():
+        print(f"\nKept {GOVERNANCE_DIR}/ (your history).")
+    if remote:
         from emkeel.connect import gh_ok
         repo = repo_from_git(target)
         if not gh_ok():
@@ -146,7 +132,53 @@ def main(argv: list[str] | None = None) -> int:
             removed = [a.path for a in actions if a.kind in ("remove", "remove-dir")]
             for label, ok in remote_cleanup(repo, "main", removed):
                 print(f"  {'✓' if ok else '✗'} {label}")
+    print("\nThis only un-governed the repo. To remove the emkeel tool from your machine:\n  pipx uninstall emkeel")
     return 0
+
+
+def main(argv: list[str] | None = None, inp=input) -> int:
+    ap = argparse.ArgumentParser(
+        prog="emkeel eject",
+        description="Remove Emkeel from this repo. Interactive by default (asks + confirms).",
+    )
+    ap.add_argument("path", nargs="?", default=".")
+    ap.add_argument("--purge", action="store_true", help="also remove emkeel-governance/ (your artifacts)")
+    ap.add_argument("--remote", action="store_true", help="also remove the GitHub side (protection + secrets + push)")
+    ap.add_argument("--all", action="store_true", help="wiring + governance + GitHub side")
+    ap.add_argument("--yes", action="store_true", help="apply without prompts (for scripts/CI)")
+    ap.add_argument("--dry-run", action="store_true", help="preview only, change nothing")
+    ns = ap.parse_args(argv)
+    target = Path(ns.path)
+    purge, remote = ns.purge or ns.all, ns.remote or ns.all
+
+    if ns.dry_run:
+        actions = apply_uninstall(target, purge, dry_run=True)
+        print(f"emkeel eject [dry-run] -> {target}")
+        for a in actions:
+            print(f"  {a.kind:11} {a.path}")
+        print("\n(nothing changed — run `emkeel eject` to choose interactively, or add --yes)")
+        return 0
+
+    if ns.yes:                       # non-interactive: scripts/CI opted out of prompts
+        return _do_eject(target, purge, remote)
+
+    if inp is input and not sys.stdin.isatty():   # can't prompt safely → don't guess
+        print("emkeel eject: non-interactive shell — re-run with --yes (+ --purge/--remote/--all) or in a terminal.")
+        return 1
+
+    # Interactive (default): ask per category, then one final confirmation.
+    print("\n  emkeel eject — remove Emkeel from this repo\n  " + "─" * 43)
+    if not _ask(inp, "  Remove Emkeel's wiring (workflows, emkeel.toml, AGENTS/CLAUDE)? [Y/n] ", True):
+        print("  Cancelled — nothing changed.")
+        return 0
+    if (target / GOVERNANCE_DIR).is_dir():
+        purge = _ask(inp, "  Also remove emkeel-governance/ (your ADRs/specs/records)? [y/N] ", False)
+    remote = _ask(inp, "  Also remove the GitHub side (branch protection + secrets + push the removal)? [y/N] ", False)
+    summary = "wiring" + (" + emkeel-governance/" if purge else "") + (" + GitHub side" if remote else "")
+    if not _ask(inp, f"\n  ⚠ About to remove: {summary}\n  Proceed? [y/N] ", False):
+        print("  Cancelled — nothing changed.")
+        return 0
+    return _do_eject(target, purge, remote)
 
 
 if __name__ == "__main__":
