@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from emkeel.i18n import ask_language, is_yes, t
+from emkeel.ui import spin
 
 TOKEN_LINK = "https://id.atlassian.net/manage-profile/security/api-tokens"
 
@@ -87,6 +88,11 @@ T: dict[str, dict[str, str]] = {
                   "en": "\n  Skipped — run `emkeel sync` once it merges."},
     "sync_later":{"es": "  Cuando se fusione, corre:  emkeel sync", "en": "  When it merges, run:  emkeel sync"},
     "done":      {"es": "\n  Listo. Comprueba con: emkeel doctor", "en": "\n  Done. Check with: emkeel doctor"},
+    "w_create":  {"es": "Creando + subiendo el repo", "en": "Creating + pushing the repo"},
+    "w_protect": {"es": "Configurando branch protection", "en": "Setting branch protection"},
+    "w_verify":  {"es": "Verificando credenciales de Jira", "en": "Verifying Jira credentials"},
+    "w_secrets": {"es": "Guardando secrets", "en": "Saving secrets"},
+    "w_am":      {"es": "Activando auto-merge", "en": "Enabling auto-merge"},
 }
 
 
@@ -242,7 +248,8 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
     # 1) New project? establish the GitHub connection first (safe: a fresh repo has no hooks).
     if not repo_exists(repo, run):
         if is_yes(inp(t(T, "q_create", lang))):
-            ok, msg = do_create_push(repo, run)
+            with spin(t(T, "w_create", lang)):
+                ok, msg = do_create_push(repo, run)
             print(t(T, "ok_create", lang) if ok else f"  ✗ {msg}")
             if not ok:
                 print(t(T, "fail_create", lang).format(repo=repo))
@@ -250,7 +257,8 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
 
     # 2) Branch protection — require the gates check + PRs
     if is_yes(inp(t(T, "q_protect", lang).format(branch=branch))):
-        ok, msg = do_protect(repo, branch, run)
+        with spin(t(T, "w_protect", lang)):
+            ok, msg = do_protect(repo, branch, run)
         print(t(T, "ok_protect", lang) if ok else t(T, "fail_protect", lang).format(msg=msg))
 
     # 3) Secrets — token via hidden prompt; verified before saving; never in chat/logs
@@ -259,7 +267,8 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
         while True:
             email = inp(t(T, "email_q", lang)).strip()
             token = getpass(t(T, "token_q", lang)).strip()
-            ok, detail = verify_jira(cfg.base_url, email, token)
+            with spin(t(T, "w_verify", lang)):
+                ok, detail = verify_jira(cfg.base_url, email, token)
             if ok:
                 print(t(T, "jira_ok", lang).format(detail=detail))
                 break
@@ -269,8 +278,10 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
                 email = token = ""
                 break
         if email and token:
-            for name, val in (("JIRA_BASE_URL", cfg.base_url), ("JIRA_EMAIL", email), ("JIRA_TOKEN", token)):
-                ok, msg = do_secret(repo, name, val, run)
+            with spin(t(T, "w_secrets", lang)):
+                results = [(name, *do_secret(repo, name, val, run))
+                           for name, val in (("JIRA_BASE_URL", cfg.base_url), ("JIRA_EMAIL", email), ("JIRA_TOKEN", token))]
+            for name, ok, msg in results:
                 print(f"  {'✓' if ok else '✗'} {name}" + ("" if ok else f": {msg}"))
 
     # 4) Finish the adopt — push, PR, auto-merge (the adoption PR only; normal changes stay human-merged).
@@ -286,8 +297,9 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
                 okp, out = do_pr_create(run)
                 print(t(T, "pr_ok", lang).format(out=out) if okp else t(T, "pr_fail", lang).format(out=out))
                 if okp:
-                    allow_auto_merge(repo, run)
-                    okm, outm = do_auto_merge(run)
+                    with spin(t(T, "w_am", lang)):
+                        allow_auto_merge(repo, run)
+                        okm, outm = do_auto_merge(run)
                     print(t(T, "am_ok", lang) if okm else t(T, "am_fail", lang).format(msg=outm))
                     if okm and is_yes(inp(t(T, "q_sync", lang))):
                         from emkeel.sync import sync, wait_for_merge

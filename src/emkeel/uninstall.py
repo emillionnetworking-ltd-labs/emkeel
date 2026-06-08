@@ -21,6 +21,7 @@ from pathlib import Path
 
 from emkeel.i18n import ask_language, is_yes, t
 from emkeel.init import APPEND_LINES
+from emkeel.ui import spin
 
 WIRING_FILES = [
     ".github/workflows/emkeel-ci.yml",
@@ -70,6 +71,8 @@ T: dict[str, dict[str, str]] = {
     "r_push_to":{"es": "push se colgó (¿hook?) — hazlo a mano: git push", "en": "push timed out (hook?) — do it manually: git push"},
     "r_push_cx":{"es": "push cancelado — hazlo a mano: git push", "en": "push cancelled — do it manually: git push"},
     "r_secrets":{"es": "secrets de Jira borrados", "en": "Jira secrets removed"},
+    "w_protect":{"es": "Quitando branch protection", "en": "Dropping branch protection"},
+    "w_secrets":{"es": "Borrando secrets", "en": "Deleting secrets"},
 }
 
 
@@ -129,7 +132,8 @@ def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run, l
     """Finish the un-govern on GitHub: drop branch protection (so removing the gates workflow
     doesn't deadlock), commit + push the removals, and drop the Jira secrets."""
     steps: list[tuple[str, bool]] = []
-    run(["gh", "api", "-X", "DELETE", f"repos/{repo}/branches/{branch}/protection"])
+    with spin(t(T, "w_protect", lang)):
+        run(["gh", "api", "-X", "DELETE", f"repos/{repo}/branches/{branch}/protection"])
     steps.append((t(T, "r_protect", lang), True))   # 404 (already none) is fine too
     if removed_paths:
         run(["git", "add", *removed_paths])         # stage only Emkeel's deletions (not your files)
@@ -143,8 +147,9 @@ def remote_cleanup(repo: str, branch: str, removed_paths: list[str], run=_run, l
             steps.append((t(T, "r_push_to", lang), False))
         except KeyboardInterrupt:
             steps.append((t(T, "r_push_cx", lang), False))
-    for name in ("JIRA_TOKEN", "JIRA_EMAIL", "JIRA_BASE_URL"):
-        run(["gh", "secret", "delete", name, "--repo", repo])
+    with spin(t(T, "w_secrets", lang)):
+        for name in ("JIRA_TOKEN", "JIRA_EMAIL", "JIRA_BASE_URL"):
+            run(["gh", "secret", "delete", name, "--repo", repo])
     steps.append((t(T, "r_secrets", lang), True))
     return steps
 
