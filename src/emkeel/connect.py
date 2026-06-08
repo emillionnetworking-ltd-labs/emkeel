@@ -188,6 +188,19 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run) -> int:
                     print("  ✓ auto-merge on — merges when the gates pass" if okm
                           else f"  ⚠ auto-merge: {outm}\n     The PR is open — merge it once the gates are green,"
                                " or enable 'Allow auto-merge' in repo Settings and re-run `gh pr merge --auto`.")
+                    if okm and inp("  Wait for it to merge and sync your local (checkout default + pull + remove this branch)? [y/N] ").strip().lower() in ("y", "yes", "s", "si"):
+                        from emkeel.sync import sync, wait_for_merge
+                        print("  Waiting for the merge (Ctrl-C to skip)…")
+                        try:
+                            if wait_for_merge(cur, run):
+                                for line in sync(run):
+                                    print("  " + line)
+                            else:
+                                print("  ⏱ not merged yet — run `emkeel sync` later to finish.")
+                        except KeyboardInterrupt:
+                            print("\n  Skipped — run `emkeel sync` once it merges.")
+                    elif okm:
+                        print("  When it merges, run:  emkeel sync")
 
     print("\n  Done. Check with: emkeel doctor")
     return 0
