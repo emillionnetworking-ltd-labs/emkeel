@@ -27,10 +27,29 @@ def _gates_required(repo: str, branch: str, run=_run) -> bool:
     return rules.returncode == 0 and "gates" in rules.stdout
 
 
+def _older(a: str, b: str) -> bool:
+    """True if version string a < b (numeric compare). Unknown/unparseable → not older."""
+    def parts(v):
+        return tuple(int(x) for x in v.split(".") if x.isdigit())
+    try:
+        return parts(a) < parts(b)
+    except Exception:
+        return False
+
+
 def gather(target: Path) -> dict:
     """Inspect repo + GitHub state. gh-dependent checks stay None when they can't be determined."""
+    from emkeel import __version__
     st = {"governed": (target / "emkeel.toml").is_file(), "repo": "", "connected": False,
-          "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main"}
+          "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main",
+          "installed": __version__, "wiring_version": ""}
+    toml = target / "emkeel.toml"
+    if toml.is_file():
+        import tomllib
+        try:
+            st["wiring_version"] = tomllib.loads(toml.read_text(encoding="utf-8")).get("emkeel", {}).get("generated_with", "")
+        except Exception:
+            pass
     r = _run(["git", "-C", str(target), "remote", "get-url", "origin"])
     if r.returncode == 0:
         m = re.search(r"github\.com[:/]+([^/]+/[^/.\s]+)", r.stdout.strip())
@@ -59,6 +78,9 @@ def report_lines(st: dict) -> list[str]:
     out = ["", "  emkeel doctor", "  " + "─" * 14]
     out.append(f"  {ok(st.get('governed'))} repo governed (emkeel.toml)"
                + ("" if st.get("governed") else "   → run: emkeel setup"))
+    inst, wv = st.get("installed"), st.get("wiring_version")
+    if inst and st.get("governed") and (not wv or _older(wv, inst)):
+        out.append(f"  ⚠ wiring is older than your tool ({wv or 'pre-0.1.46'} vs {inst}) → run: emkeel update")
     if not st.get("connected"):
         out += ["  ✗ not connected to GitHub yet",
                 "      → create + push the repo:  gh repo create --source=. --push",

@@ -135,7 +135,17 @@ pipx uninstall emkeel
 | `pipx upgrade emkeel` | update the Emkeel tool |
 | `emkeel update` | after upgrading, refresh an adopted repo's wiring to the new version |
 
-> **Updates are safe:** your repo's CI pins `emkeel~=0.MINOR.0` — auto patches/minors; a breaking major is opt-in.
+## Keeping up to date
+
+Three layers update independently — know which is which:
+
+| Layer | Updates how |
+| --- | --- |
+| **The `emkeel` tool** (your CLI) | `pipx upgrade emkeel` |
+| **A repo's CI gates** (the enforcement) | **automatic** — CI installs `emkeel~=0.MINOR.0` on every run, so the gate logic is always current. Nothing to do. |
+| **A repo's generated files** (AGENTS.md, CLAUDE.md, workflow YAMLs) | `emkeel update` in the repo (then commit) — they were written at adoption and don't change on upgrade |
+
+`emkeel doctor` tells you when a repo's files are older than your installed tool, so you'll know when to run `emkeel update`. **Updates are safe:** the CI pin auto-takes patches/minors; a breaking major is opt-in.
 
 ## What you get
 

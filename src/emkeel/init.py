@@ -99,6 +99,7 @@ def apply(target: Path, cfg: Config, force: bool, dry_run: bool) -> list[Action]
 # --- templates -------------------------------------------------------------
 
 def _toml(cfg: Config) -> str:
+    from emkeel import __version__
     return (
         "# Emkeel config (non-secret). Real credentials go in .env / GitHub Secrets.\n"
         "[jira]\n"
@@ -108,6 +109,7 @@ def _toml(cfg: Config) -> str:
         f'repo = "{cfg.github_repo}"\n\n'
         "[emkeel]\n"
         f'source = "{cfg.emkeel_source}"\n'
+        f'generated_with = "{__version__}"   # the Emkeel version that wrote this wiring (emkeel doctor checks it)\n'
     )
 
 
