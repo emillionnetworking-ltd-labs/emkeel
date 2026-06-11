@@ -57,6 +57,11 @@ jobs:
           EMKEEL_BRANCH: ${{ github.head_ref }}
         run: python -m emkeel.gates.check_strategy_link
 
+      # Gate: toda estrategia debe estar grounded (cada opción con fuente). Dormant si no hay.
+      - name: "Gate — strategy quality"
+        if: github.event_name == 'pull_request'
+        run: python -m emkeel.gates.check_strategy_quality
+
       # Gate: la suite completa de tests (memoria durable anti-regresión).
       - name: "Gate — tests"
         run: pytest -q

@@ -171,6 +171,9 @@ jobs:
         env:
           EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
         run: python -m emkeel.gates.check_strategy_link
+      - name: "Gate - strategy quality (every strategy doc is sourced + complete)"
+        if: github.event_name == 'pull_request'
+        run: python -m emkeel.gates.check_strategy_quality
 """
 
 
