@@ -108,3 +108,18 @@ def test_main_smoke(tmp_path, capsys):
 def test_toml_stamps_generated_with(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     assert "generated_with" in (tmp_path / "emkeel.toml").read_text()
+
+
+def test_scaffolds_strategy_dir(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert (tmp_path / "emkeel-governance/strategy/.gitkeep").is_file()
+
+
+def test_ci_includes_strategy_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert "check_strategy_link" in (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+
+
+def test_agents_md_mentions_strategy(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert "Strategy:" in (tmp_path / "AGENTS.md").read_text()
