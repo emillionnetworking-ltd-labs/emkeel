@@ -56,6 +56,12 @@ def main(argv: list[str] | None = None) -> int:
         print("  No emkeel.toml here — run `emkeel setup` first.")
         return 1
 
+    if not no_ship:
+        # Default: refresh + ship in an isolated worktree — never touches YOUR working tree.
+        from emkeel.ship import ship_update
+        return ship_update(target)
+
+    # --no-ship: refresh the LOCAL working tree (you commit it yourself).
     from emkeel.init import APPEND_LINES, _files
     results: list[tuple[str, str]] = []   # (status, path) — status: created|updated|appended|unchanged
     for path, content in _files(cfg).items():
@@ -82,18 +88,13 @@ def main(argv: list[str] | None = None) -> int:
     if not changed:
         print("emkeel update — already current; nothing to change.")
         return 0
-    print("emkeel update — refreshed the wiring:")
+    print("emkeel update — refreshed the wiring (local; --no-ship):")
     for s, p in changed:
         print(f"  {s:10} {p}")
     n_un = len(results) - len(changed)
     if n_un:
         print(f"  ({n_un} file(s) already current)")
-    if not no_ship:
-        from emkeel.ship import ship
-        print("\nShipping the refresh through the maintenance lane (PR → auto-merge)…")
-        return ship([p for _, p in changed], target)
-    print("\n(--no-ship: refreshed files left in your working tree — commit them yourself,"
-          " or re-run `emkeel update` to ship)")
+    print("\n(--no-ship: commit the refreshed files yourself, or run `emkeel update` to ship them)")
     return 0
 
 

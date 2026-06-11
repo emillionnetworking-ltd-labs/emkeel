@@ -38,14 +38,14 @@ def main(argv: list[str] | None = None) -> int:
     if old == value:
         print(f"{field} is already '{value}' — nothing to change.")
         return 0
+    if not no_ship:
+        # Default: change it on origin/<default> in an isolated worktree — your tree is untouched.
+        from emkeel.ship import ship_set
+        print(f"emkeel set — {field}: '{old}' → '{value}' (shipping via the maintenance lane)…")
+        return ship_set(attr, value, target)
     setattr(cfg, attr, value)
     (target / "emkeel.toml").write_text(_toml(cfg), encoding="utf-8")
-    print(f"emkeel set — {field}: '{old}' → '{value}'  (emkeel.toml updated)")
-    if not no_ship:
-        from emkeel.ship import ship
-        print("Shipping the change through the maintenance lane (PR → auto-merge)…")
-        return ship(["emkeel.toml"], target)
-    print("  --no-ship: commit emkeel.toml yourself, or run `emkeel update` to ship.")
+    print(f"emkeel set — {field}: '{old}' → '{value}'  (--no-ship: emkeel.toml updated; commit it)")
     return 0
 
 

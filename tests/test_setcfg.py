@@ -37,9 +37,9 @@ def test_set_ships_by_default(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = []
     import emkeel.ship as shipmod
-    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    monkeypatch.setattr(shipmod, "ship_set", lambda attr, value, target=None: calls.append((attr, value)) or 0)
     assert main(["jira-project", "ECO"]) == 0
-    assert calls and calls[0] == ["emkeel.toml"]
+    assert calls and calls[0] == ("jira_project", "ECO")
 
 
 def test_set_no_ship(tmp_path, monkeypatch):
@@ -47,6 +47,7 @@ def test_set_no_ship(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     calls = []
     import emkeel.ship as shipmod
-    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    monkeypatch.setattr(shipmod, "ship_set", lambda attr, value, target=None: calls.append(1) or 0)
     assert main(["jira-project", "ECO", "--no-ship"]) == 0
     assert calls == []
+    assert 'project_key = "ECO"' in (tmp_path / "emkeel.toml").read_text()

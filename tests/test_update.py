@@ -61,7 +61,7 @@ def test_update_noop_when_current(tmp_path, monkeypatch, capsys):
     apply(tmp_path, CFG, force=False, dry_run=False)
     monkeypatch.chdir(tmp_path)
     from emkeel.update import main as update_main
-    assert update_main() == 0
+    assert update_main(["--no-ship"]) == 0
     assert "already current" in capsys.readouterr().out.lower()   # 2nd run = honest no-op
 
 
@@ -84,14 +84,13 @@ def test_load_cfg_preserves_source(tmp_path):
 
 def test_update_ships_by_default(tmp_path, monkeypatch):
     apply(tmp_path, CFG, force=False, dry_run=False)
-    (tmp_path / "AGENTS.md").write_text("stale")          # force a real change
     monkeypatch.chdir(tmp_path)
     calls = []
     import emkeel.ship as shipmod
-    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    monkeypatch.setattr(shipmod, "ship_update", lambda target=None: calls.append(1) or 0)
     from emkeel.update import main as update_main
     assert update_main([]) == 0
-    assert calls and "AGENTS.md" in calls[0]              # shipped without any flag
+    assert calls                                          # ships (worktree) with no flag
 
 
 def test_update_no_ship_leaves_pending(tmp_path, monkeypatch, capsys):
@@ -100,7 +99,9 @@ def test_update_no_ship_leaves_pending(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     calls = []
     import emkeel.ship as shipmod
-    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    monkeypatch.setattr(shipmod, "ship_update", lambda target=None: calls.append(1) or 0)
     from emkeel.update import main as update_main
     assert update_main(["--no-ship"]) == 0
-    assert calls == [] and "no-ship" in capsys.readouterr().out.lower()
+    out = capsys.readouterr().out
+    assert calls == [] and "no-ship" in out.lower()
+    assert (tmp_path / "AGENTS.md").read_text() != "stale"   # refreshed locally
