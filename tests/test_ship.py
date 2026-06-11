@@ -83,3 +83,44 @@ def test_default_branch_prefers_gh(tmp_path):
     from emkeel.ship import _default_branch
     run = lambda a, **k: SimpleNamespace(returncode=0, stdout="trunk", stderr="")
     assert _default_branch(run, tmp_path, "o/r") == "trunk"
+
+
+def test_clean_local_removes_only_emkeel_leftovers(tmp_path):
+    from emkeel import connect
+    from emkeel.ship import _clean_local
+    work = tmp_path / "w"; work.mkdir()
+    _git(["init", "-q"], work); _git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _git(["config", "user.email", "t@t.co"], work); _git(["config", "user.name", "t"], work)
+    _git(["config", "commit.gpgsign", "false"], work)
+    apply(work, Config(github_repo="o/r"), force=False, dry_run=False)
+    template_agents = (work / "AGENTS.md").read_text()
+    (work / "AGENTS.md").write_text("# OLD committed\n")          # commit an OLD AGENTS.md
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    # the leftovers + the user's stuff, all uncommitted together:
+    (work / "AGENTS.md").write_text(template_agents)              # emkeel leftover (== template)
+    (work / "product.txt").write_text("mine")                    # the user's product work
+    (work / "emkeel.toml").write_text((work / "emkeel.toml").read_text() + "# hand edit\n")  # hand-edited emkeel file
+    (work / "emkeel-governance" / "specs" / "ECO-1.md").write_text("my audit spec")           # the user's own artifact
+
+    _clean_local(work, connect._run)
+
+    assert (work / "AGENTS.md").read_text() == "# OLD committed\n"   # emkeel leftover reverted
+    assert (work / "product.txt").read_text() == "mine"             # product untouched
+    assert "# hand edit" in (work / "emkeel.toml").read_text()      # hand-edited emkeel file left alone
+    assert (work / "emkeel-governance" / "specs" / "ECO-1.md").read_text() == "my audit spec"  # user artifact untouched
+
+
+def test_clean_local_removes_untracked_emkeel_file(tmp_path):
+    from emkeel import connect
+    from emkeel.ship import _clean_local
+    work = tmp_path / "w"; work.mkdir()
+    _git(["init", "-q"], work); _git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _git(["config", "user.email", "t@t.co"], work); _git(["config", "user.name", "t"], work)
+    _git(["config", "commit.gpgsign", "false"], work)
+    apply(work, Config(github_repo="o/r"), force=False, dry_run=False)
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    _git(["rm", "--cached", "-q", "emkeel-governance/strategy/.gitkeep"], work)   # make it untracked
+    _git(["commit", "-qm", "untrack"], work)
+    assert (work / "emkeel-governance" / "strategy" / ".gitkeep").exists()
+    _clean_local(work, connect._run)
+    assert not (work / "emkeel-governance" / "strategy" / ".gitkeep").exists()    # untracked emkeel file removed
