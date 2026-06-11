@@ -157,3 +157,16 @@ def test_clean_local_keeps_toml_value_edit(tmp_path):
     (work / "emkeel.toml").write_text(toml.replace('project_key = "SCRUM"', 'project_key = "ECO"'))
     _clean_local(work, connect._run)
     assert 'project_key = "ECO"' in (work / "emkeel.toml").read_text()   # real value edit preserved
+
+
+def test_ship_update_skips_stamp_only_change(tmp_path):
+    import re
+    origin, work = _seed_repo(tmp_path)
+    # origin/main is current EXCEPT for a different version stamp (everything else matches templates)
+    toml = (work / "emkeel.toml").read_text()
+    (work / "emkeel.toml").write_text(re.sub(r'generated_with = "[^"]*"', 'generated_with = "0.0.1"', toml))
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    _git(["remote", "add", "origin", str(origin)], work); _git(["push", "-q", "-u", "origin", "main"], work)
+    calls = []
+    assert ship_update(target=work, run=_real_git_fake_gh(calls)) == 0
+    assert "gh pr create" not in "\n".join(calls)   # only the stamp differs → no empty PR
