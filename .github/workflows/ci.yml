@@ -40,6 +40,13 @@ jobs:
           EMKEEL_BRANCH: ${{ github.head_ref }}
         run: python -m emkeel.gates.check_acceptance_criteria
 
+      # Gate: un feature debe declarar su estrategia (dormant hasta que exista una).
+      - name: "Gate — strategy link (features)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_strategy_link
+
       # Gate: la suite completa de tests (memoria durable anti-regresión).
       - name: "Gate — tests"
         run: pytest -q
