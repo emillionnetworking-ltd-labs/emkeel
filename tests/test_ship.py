@@ -124,3 +124,36 @@ def test_clean_local_removes_untracked_emkeel_file(tmp_path):
     assert (work / "emkeel-governance" / "strategy" / ".gitkeep").exists()
     _clean_local(work, connect._run)
     assert not (work / "emkeel-governance" / "strategy" / ".gitkeep").exists()    # untracked emkeel file removed
+
+
+def test_clean_local_cleans_toml_stamp_only(tmp_path):
+    import re
+
+    from emkeel import connect
+    from emkeel.ship import _clean_local
+    work = tmp_path / "w"; work.mkdir()
+    _git(["init", "-q"], work); _git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _git(["config", "user.email", "t@t.co"], work); _git(["config", "user.name", "t"], work)
+    _git(["config", "commit.gpgsign", "false"], work)
+    apply(work, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    committed = (work / "emkeel.toml").read_text()
+    # leftover where ONLY the version stamp differs (the bug: this wasn't getting cleaned)
+    (work / "emkeel.toml").write_text(re.sub(r'generated_with = "[^"]*"', 'generated_with = "0.0.1"', committed))
+    _clean_local(work, connect._run)
+    assert (work / "emkeel.toml").read_text() == committed         # cleaned despite the stamp diff
+
+
+def test_clean_local_keeps_toml_value_edit(tmp_path):
+    from emkeel import connect
+    from emkeel.ship import _clean_local
+    work = tmp_path / "w"; work.mkdir()
+    _git(["init", "-q"], work); _git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _git(["config", "user.email", "t@t.co"], work); _git(["config", "user.name", "t"], work)
+    _git(["config", "commit.gpgsign", "false"], work)
+    apply(work, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    toml = (work / "emkeel.toml").read_text()
+    (work / "emkeel.toml").write_text(toml.replace('project_key = "SCRUM"', 'project_key = "ECO"'))
+    _clean_local(work, connect._run)
+    assert 'project_key = "ECO"' in (work / "emkeel.toml").read_text()   # real value edit preserved
