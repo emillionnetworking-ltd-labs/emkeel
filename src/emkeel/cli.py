@@ -8,9 +8,8 @@ Subcommands:
   emkeel doctor          check what's set up and what's still pending (with fix links)
   emkeel connect         automate the GitHub side via gh (branch protection, secrets; new repo: create+push)
   emkeel sync            after the adopt PR merges: checkout default + pull + delete the merged branch
-  emkeel update          refresh the generated wiring to the installed version (after pipx upgrade)
-                         add `--ship <KEY>` to branch→commit→push→PR→auto-merge the refresh
-  emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo); --ship <KEY> too
+  emkeel update          refresh the wiring AND ship it (maintenance lane → PR → auto-merge); --no-ship to leave pending
+  emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo) and ship it; --no-ship too
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 

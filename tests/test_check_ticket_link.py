@@ -56,3 +56,11 @@ def test_gate_silent_when_project_matches(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _warn_if_project_mismatch("SCRUM-9")
     assert "::warning::" not in capsys.readouterr().out
+
+
+def test_ticket_link_accepts_maint_branch(monkeypatch, capsys):
+    from emkeel.gates.check_ticket_link import main
+    monkeypatch.setenv("EMKEEL_BRANCH", "emkeel-maint/0.1.52-abc")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    assert main() == 0                                   # no Jira ticket required for the lane
+    assert "maintenance" in capsys.readouterr().out.lower()

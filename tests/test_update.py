@@ -24,7 +24,7 @@ def test_update_refreshes_stale_wiring(tmp_path, monkeypatch):
     (tmp_path / "emkeel-governance" / "specs").mkdir(parents=True, exist_ok=True)
     (tmp_path / "emkeel-governance" / "specs" / "MINE.md").write_text("my spec")
     monkeypatch.chdir(tmp_path)
-    assert main([]) == 0
+    assert main(["--no-ship"]) == 0
     agents = (tmp_path / "AGENTS.md").read_text()
     assert "Rules that matter live in CI" in agents and "no rule here" not in agents  # refreshed to current template
     assert (tmp_path / "emkeel-governance" / "specs" / "MINE.md").read_text() == "my spec"  # artifacts untouched
@@ -70,7 +70,7 @@ def test_update_reports_only_changed(tmp_path, monkeypatch, capsys):
     (tmp_path / "AGENTS.md").write_text("stale")
     monkeypatch.chdir(tmp_path)
     from emkeel.update import main as update_main
-    assert update_main() == 0
+    assert update_main(["--no-ship"]) == 0
     out = capsys.readouterr().out
     assert "updated" in out and "AGENTS.md" in out and "already current" in out  # only AGENTS.md changed
 
@@ -82,13 +82,25 @@ def test_load_cfg_preserves_source(tmp_path):
     assert load_cfg(tmp_path).emkeel_source == src
 
 
-def test_update_ship_invokes_governance(tmp_path, monkeypatch):
+def test_update_ships_by_default(tmp_path, monkeypatch):
     apply(tmp_path, CFG, force=False, dry_run=False)
     (tmp_path / "AGENTS.md").write_text("stale")          # force a real change
     monkeypatch.chdir(tmp_path)
     calls = []
     import emkeel.ship as shipmod
-    monkeypatch.setattr(shipmod, "ship", lambda key, paths, target=None: calls.append((key, paths)) or 0)
+    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
     from emkeel.update import main as update_main
-    assert update_main(["--ship", "KEEL-9"]) == 0
-    assert calls and calls[0][0] == "KEEL-9" and "AGENTS.md" in calls[0][1]
+    assert update_main([]) == 0
+    assert calls and "AGENTS.md" in calls[0]              # shipped without any flag
+
+
+def test_update_no_ship_leaves_pending(tmp_path, monkeypatch, capsys):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("stale")
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    import emkeel.ship as shipmod
+    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    from emkeel.update import main as update_main
+    assert update_main(["--no-ship"]) == 0
+    assert calls == [] and "no-ship" in capsys.readouterr().out.lower()
