@@ -74,3 +74,17 @@ def test_current_wiring_no_nudge():
     r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
                       "secrets_ok": True, "protection_ok": True, "drift": []})
     assert not _has(r, "emkeel update")
+
+
+def test_project_mismatch_warns():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "jira_project": "SCRUM", "branch_key": "ECO-1"})
+    assert _has(r, "ECO-1") and _has(r, "SCRUM")
+
+
+def test_project_match_no_warn():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "jira_project": "SCRUM", "branch_key": "SCRUM-9"})
+    assert not _has(r, "configured Jira project")

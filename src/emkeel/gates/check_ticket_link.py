@@ -39,11 +39,28 @@ def _warn_if_stale_wiring() -> None:
         pass  # a nudge must never break the gate
 
 
+def _warn_if_project_mismatch(key: str) -> None:
+    """Non-blocking nudge: if the ticket key's project (ECO in ECO-1) differs from the project
+    declared in emkeel.toml (e.g. SCRUM), the config and the actual work have drifted apart."""
+    try:
+        from pathlib import Path
+        from emkeel.update import load_cfg
+        cfg = load_cfg(Path("."))
+        declared = cfg.jira_project if cfg else ""
+        used = key.split("-")[0] if key else ""
+        if declared and used and used != declared:
+            print(f"::warning::Branch uses '{key}' but emkeel.toml declares project '{declared}'. "
+                  f"Align them — update emkeel.toml (or use {declared}-* keys).")
+    except Exception:
+        pass  # a nudge must never break the gate
+
+
 def main() -> int:
     _warn_if_stale_wiring()
     branch = os.environ.get("EMKEEL_BRANCH", "")
     pr_title = os.environ.get("EMKEEL_PR_TITLE", "")
     key = find_ticket_key(branch, pr_title)
+    _warn_if_project_mismatch(key)
     if key:
         print(f"OK: ticket '{key}' linked (branch='{branch}' pr_title='{pr_title}').")
         return 0
