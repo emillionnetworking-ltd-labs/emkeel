@@ -117,9 +117,18 @@ pipx uninstall emkeel
 | Command | What it does |
 | --- | --- |
 | `emkeel doctor` | what's set up / what's pending (with fix links) |
+| `emkeel set <field> <value>` | change a config value (`jira-project` / `jira-url` / `github-repo`) — ships it via a PR (`--no-ship` to keep it local) |
 | `emkeel sync` | after a merge: checkout default + pull + drop the merged branch |
 | `emkeel review <KEY>` | per-criterion review template for a ticket |
 | `emkeel version` | installed version (+ flags a newer one on PyPI) |
+
+**Strategy** (choose an engineering path — researched, not guessed)
+
+| Command | What it does |
+| --- | --- |
+| `/strategy <topic>` *(skill)* | research + decide a path for a topic (a module, security, a technology…) — grounded, source-cited, **human-approved** |
+| `emkeel strategy new <topic>` | scaffold a structured strategy doc |
+| `emkeel strategy check` | lint strategies — every option must cite a source (the anti-hallucination gate) |
 
 **Remove**
 
@@ -133,7 +142,7 @@ pipx uninstall emkeel
 | Command | What it does |
 | --- | --- |
 | `pipx upgrade emkeel` | update the Emkeel tool |
-| `emkeel update` | after upgrading, refresh an adopted repo's wiring to the new version |
+| `emkeel update` | refresh an adopted repo's wiring to the installed version — **ships the refresh via a PR + auto-merge** (`--no-ship` to leave it local) |
 
 ## Keeping up to date
 
@@ -143,9 +152,9 @@ Three layers update independently — know which is which:
 | --- | --- |
 | **The `emkeel` tool** (your CLI) | `pipx upgrade emkeel` |
 | **A repo's CI gates** (the enforcement) | **automatic** — CI installs `emkeel~=0.MINOR.0` on every run, so the gate logic is always current. Nothing to do. |
-| **A repo's generated files** (AGENTS.md, CLAUDE.md, workflow YAMLs) | `emkeel update` in the repo (then commit) — they were written at adoption and don't change on upgrade |
+| **A repo's generated files** (AGENTS.md, CLAUDE.md, workflow YAMLs) | `emkeel update` — it **ships the refresh through a PR + auto-merge** (only Emkeel's own files; your work is untouched). `--no-ship` to handle it manually. |
 
-`emkeel doctor` tells you when a repo's files are older than your installed tool, so you'll know when to run `emkeel update`. **Updates are safe:** the CI pin auto-takes patches/minors; a breaking major is opt-in.
+`emkeel doctor` checks your wiring against the repo's **default branch** and flags when it's behind, so you'll know when to run `emkeel update`. **Updates are safe:** the CI pin auto-takes patches/minors; a breaking major is opt-in.
 
 ## What you get
 
@@ -154,6 +163,8 @@ Three layers update independently — know which is which:
 - **Auto-close** — merging a PR moves the linked Jira ticket to Done.
 - **AI review-assist** — a per-criterion verdict against the spec before you merge.
 - **Clean separation** — governance artifacts live in one `emkeel-governance/` folder, never shipped.
+- **Researched strategies** — `/strategy <topic>` runs a grounded, source-cited debate to pick an
+  engineering path; gates ensure features follow it and that every strategy cites real sources.
 
 See `docs/lifecycle.md` for the model.
 
