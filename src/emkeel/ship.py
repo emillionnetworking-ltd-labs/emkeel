@@ -1,19 +1,22 @@
-"""Auto-ship emkeel-managed changes through a scope-gated maintenance lane.
+"""Auto-ship emkeel-managed changes through a scope-gated maintenance lane — in an ISOLATED worktree.
 
-Used by `emkeel update` / `emkeel set` (ship-by-default; `--no-ship` opts out) so a wiring refresh
-never sits uncommitted — but still goes through a PR + the gates (NEVER a direct push to main).
+Used by `emkeel update` / `emkeel set` (ship-by-default; `--no-ship` opts out). The change is made in
+a throwaway `git worktree` checked out at `origin/<default>`, committed, pushed as
+`emkeel-maint/<version>-<sha>`, opened as a PR and auto-merged — so it goes through the gates but
+NEVER touches your working tree (your in-progress product work is left completely alone).
 
-The lane: a branch `emkeel-maint/<version>-<sha>` forked from the DEFAULT branch (so it doesn't
-matter which branch you're on), committing ONLY the emkeel-managed files. The `check_ticket_link`
-gate accepts this branch without a Jira ticket because `check_maint_scope` verifies the PR touches
-nothing but emkeel-managed files — a bounded, self-policing exemption, not a blanket bypass.
+The `check_ticket_link` gate accepts `emkeel-maint/*` without a Jira ticket because `check_maint_scope`
+proves the PR touches nothing but emkeel-managed files — a bounded, self-policing exemption.
 """
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 
 from emkeel import connect
+from emkeel.update import load_cfg
 
 MAINT_PREFIX = "emkeel-maint/"
 
@@ -29,64 +32,72 @@ def _default_branch(run, target: Path, repo: str) -> str:
     return "main"
 
 
-def ship(paths: list[str], target: Path = Path("."), run=connect._run) -> int:
-    paths = [p for p in paths if (target / p).exists()]
-    if not paths:
-        print("  Nothing to ship.")
-        return 0
+def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
+    """Run `mutate(worktree_path)` on a fresh checkout of origin/<default> and ship the result."""
     if not connect.gh_ok(run):
-        print("  gh is not authenticated — run `gh auth login`, then commit/push yourself.")
+        print("  gh is not authenticated — run `gh auth login`, then re-run.")
         return 1
-
-    # Refuse if there are OTHER uncommitted changes — the lane must carry only emkeel files.
-    status = run(["git", "-C", str(target), "status", "--porcelain"])
-    dirty = [ln[3:] for ln in status.stdout.splitlines() if ln.strip()]
-    stray = [f for f in dirty if f not in paths]
-    if stray:
-        print(f"  You have other uncommitted changes ({', '.join(stray[:3])}…) — "
-              "commit or stash them first, then re-run.")
+    cfg = load_cfg(target)
+    if cfg is None or not cfg.github_repo:
+        print("  No emkeel.toml here — run `emkeel setup` first.")
         return 1
-
-    cfg = connect.load_config(target)
-    repo = cfg.repo if cfg else ""
+    repo = cfg.github_repo
     default = _default_branch(run, target, repo)
-    orig = run(["git", "-C", str(target), "rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()
-    content = {p: (target / p).read_text(encoding="utf-8") for p in paths}
-
-    run(["git", "-C", str(target), "fetch", "-q", "origin", default])
+    if run(["git", "-C", str(target), "fetch", "-q", "origin", default]).returncode != 0:
+        print(f"  could not fetch origin/{default} — is the repo pushed to GitHub?")
+        return 1
     sha = run(["git", "-C", str(target), "rev-parse", "--short", f"origin/{default}"]).stdout.strip() or "base"
     from emkeel import __version__
     branch = f"{MAINT_PREFIX}{__version__}-{sha}"
 
-    run(["git", "-C", str(target), "checkout", "--", *paths])   # clean our paths so the switch is clean
-    if run(["git", "-C", str(target), "checkout", "-B", branch, f"origin/{default}"]).returncode != 0:
-        print(f"  could not fork the maintenance branch from origin/{default}.")
-        return 1
-    for p, c in content.items():
-        (target / p).write_text(c, encoding="utf-8")
-    run(["git", "-C", str(target), "add", *paths])
-    commit = run(["git", "-C", str(target), "commit", "-m", f"chore: refresh emkeel wiring ({__version__})"])
-    blob = ((commit.stdout or "") + (commit.stderr or "")).lower()
-    if commit.returncode != 0 and "nothing to commit" not in blob:
-        print(f"  commit failed: {(commit.stderr or commit.stdout).strip()}")
-        if orig:
-            run(["git", "-C", str(target), "checkout", "-q", orig])
-        return 1
-
-    print(f"  Shipping via {branch} (a pre-push hook may run — Ctrl-C to skip)…")
-    ok, msg = connect.do_push(run)
-    if not ok:
-        print(f"  push failed: {msg}")
-        return 1
-    ok, msg = connect.do_pr_create(run)
-    if not ok:
-        print(f"  PR create: {msg}")
-        return 1
-    print(f"  PR opened: {msg}")
-    if repo:
+    wt = tempfile.mkdtemp(prefix="emkeel-maint-")
+    try:
+        r = run(["git", "-C", str(target), "worktree", "add", "-q", "-B", branch, wt, f"origin/{default}"])
+        if r.returncode != 0:
+            print(f"  worktree add failed: {(r.stderr or r.stdout).strip()}")
+            return 1
+        mutate(Path(wt))                                  # caller writes the emkeel changes here
+        if not run(["git", "-C", wt, "status", "--porcelain"]).stdout.strip():
+            print(f"  origin/{default} is already current — nothing to ship.")
+            return 0
+        run(["git", "-C", wt, "add", "-A"])
+        run(["git", "-C", wt, "commit", "-q", "-m", f"chore: {summary}"])
+        print(f"  Shipping via {branch} (a pre-push hook may run — Ctrl-C to skip)…")
+        if run(["git", "-C", wt, "push", "-q", "-u", "origin", branch], capture=False).returncode != 0:
+            print("  push failed.")
+            return 1
+        pr = run(["gh", "pr", "create", "-R", repo, "--head", branch, "--base", default,
+                  "--title", f"chore: {summary}", "--body", "Automated Emkeel maintenance (scope-gated lane)."])
+        if pr.returncode != 0:
+            print(f"  PR create: {(pr.stderr or pr.stdout).strip()}")
+            return 1
+        print(f"  PR opened: {(pr.stdout or '').strip()}")
         connect.allow_auto_merge(repo, run)
-    ok, msg = connect.do_auto_merge(run)
-    print("  ✓ auto-merge enabled — it lands when the gates pass." if ok else f"  auto-merge: {msg}")
-    if orig:
-        run(["git", "-C", str(target), "checkout", "-q", orig])   # return you to where you were
-    return 0
+        m = run(["gh", "pr", "merge", branch, "-R", repo, "--auto", "--squash"])
+        print("  ✓ auto-merge enabled — it lands when the gates pass."
+              if m.returncode == 0 else f"  auto-merge: {(m.stderr or m.stdout).strip()}")
+        return 0
+    finally:
+        run(["git", "-C", str(target), "worktree", "remove", "--force", wt])
+        shutil.rmtree(wt, ignore_errors=True)
+
+
+def ship_update(target: Path = Path("."), run=connect._run) -> int:
+    """Refresh the wiring on origin/<default> (regenerate from its own committed config) and ship it."""
+    from emkeel.init import apply
+
+    def mutate(wt: Path):
+        apply(wt, load_cfg(wt), force=True, dry_run=False)
+    from emkeel import __version__
+    return _ship_via_worktree(mutate, f"refresh emkeel wiring ({__version__})", target, run)
+
+
+def ship_set(attr: str, value: str, target: Path = Path("."), run=connect._run) -> int:
+    """Change one emkeel.toml field on origin/<default> and ship it."""
+    from emkeel.init import _toml
+
+    def mutate(wt: Path):
+        cfg = load_cfg(wt)
+        setattr(cfg, attr, value)
+        (wt / "emkeel.toml").write_text(_toml(cfg), encoding="utf-8")
+    return _ship_via_worktree(mutate, f"set {attr} = {value} (emkeel.toml)", target, run)
