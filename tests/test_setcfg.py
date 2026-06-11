@@ -7,7 +7,7 @@ from emkeel.setcfg import main
 def test_set_changes_project(tmp_path, monkeypatch, capsys):
     apply(tmp_path, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
     monkeypatch.chdir(tmp_path)
-    assert main(["jira-project", "ECO"]) == 0
+    assert main(["jira-project", "ECO", "--no-ship"]) == 0
     assert 'project_key = "ECO"' in (tmp_path / "emkeel.toml").read_text()
     assert "SCRUM" in capsys.readouterr().out  # reports the old→new change
 
@@ -16,7 +16,7 @@ def test_set_preserves_source(tmp_path, monkeypatch):
     src = "git+https://x/emkeel.git"
     apply(tmp_path, Config(jira_project="SCRUM", github_repo="o/r", emkeel_source=src), force=False, dry_run=False)
     monkeypatch.chdir(tmp_path)
-    main(["jira-project", "ECO"])
+    main(["jira-project", "ECO", "--no-ship"])
     assert src in (tmp_path / "emkeel.toml").read_text()   # set must not clobber a custom source
 
 
@@ -32,11 +32,21 @@ def test_set_rejects_unknown_field(tmp_path, monkeypatch):
     assert main(["bogus", "x"]) == 2
 
 
-def test_set_ship_invokes_governance(tmp_path, monkeypatch):
+def test_set_ships_by_default(tmp_path, monkeypatch):
     apply(tmp_path, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
     monkeypatch.chdir(tmp_path)
     calls = []
     import emkeel.ship as shipmod
-    monkeypatch.setattr(shipmod, "ship", lambda key, paths, target=None: calls.append((key, paths)) or 0)
-    assert main(["jira-project", "ECO", "--ship", "KEEL-9"]) == 0
-    assert calls and calls[0] == ("KEEL-9", ["emkeel.toml"])
+    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    assert main(["jira-project", "ECO"]) == 0
+    assert calls and calls[0] == ["emkeel.toml"]
+
+
+def test_set_no_ship(tmp_path, monkeypatch):
+    apply(tmp_path, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    import emkeel.ship as shipmod
+    monkeypatch.setattr(shipmod, "ship", lambda paths, target=None: calls.append(paths) or 0)
+    assert main(["jira-project", "ECO", "--no-ship"]) == 0
+    assert calls == []

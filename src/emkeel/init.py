@@ -136,6 +136,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history so check_maint_scope can diff against the base
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -147,6 +149,12 @@ jobs:
           EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
           EMKEEL_PR_TITLE: ${{{{ github.event.pull_request.title }}}}
         run: python -m emkeel.gates.check_ticket_link
+      - name: "Gate - maintenance scope (emkeel-maint lane only)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+          EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
+        run: python -m emkeel.gates.check_maint_scope
       - name: "Gate - plan present (features)"
         if: github.event_name == 'pull_request'
         env:

@@ -123,3 +123,9 @@ def test_ci_includes_strategy_gate(tmp_path):
 def test_agents_md_mentions_strategy(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     assert "Strategy:" in (tmp_path / "AGENTS.md").read_text()
+
+
+def test_ci_includes_maint_scope_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    assert "check_maint_scope" in ci and "fetch-depth: 0" in ci

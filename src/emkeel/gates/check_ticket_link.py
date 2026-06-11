@@ -58,6 +58,11 @@ def _warn_if_project_mismatch(key: str) -> None:
 def main() -> int:
     _warn_if_stale_wiring()
     branch = os.environ.get("EMKEEL_BRANCH", "")
+    if branch.startswith("emkeel-maint/"):
+        # Tool maintenance lane: no Jira ticket required — check_maint_scope guarantees the PR
+        # touches only emkeel-managed files, so it can't smuggle code past traceability.
+        print("OK: emkeel maintenance branch — no ticket required (scope-gated by check_maint_scope).")
+        return 0
     pr_title = os.environ.get("EMKEEL_PR_TITLE", "")
     key = find_ticket_key(branch, pr_title)
     _warn_if_project_mismatch(key)

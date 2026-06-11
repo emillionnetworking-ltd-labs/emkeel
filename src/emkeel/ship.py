@@ -1,60 +1,79 @@
-"""Ship emkeel-managed changes through governance: branch → commit → push → PR → auto-merge.
+"""Auto-ship emkeel-managed changes through a scope-gated maintenance lane.
 
-Used by `emkeel update --ship <KEY>` / `emkeel set ... --ship <KEY>` so a wiring refresh doesn't sit
-uncommitted — but still goes through a PR + the gates (NEVER a direct push to main). Reuses
-connect.py's machinery: the push inherits the terminal (a pre-push hook stays visible), the PR is
-created via gh, and GitHub's native auto-merge lands it WHEN the required checks pass.
+Used by `emkeel update` / `emkeel set` (ship-by-default; `--no-ship` opts out) so a wiring refresh
+never sits uncommitted — but still goes through a PR + the gates (NEVER a direct push to main).
 
-Run it from your default branch: it forks `chore/<KEY>-emkeel-update`, commits only the
-emkeel-managed files you pass, and opens the PR from there.
+The lane: a branch `emkeel-maint/<version>-<sha>` forked from the DEFAULT branch (so it doesn't
+matter which branch you're on), committing ONLY the emkeel-managed files. The `check_ticket_link`
+gate accepts this branch without a Jira ticket because `check_maint_scope` verifies the PR touches
+nothing but emkeel-managed files — a bounded, self-policing exemption, not a blanket bypass.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from emkeel import connect
 
-KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+MAINT_PREFIX = "emkeel-maint/"
 
 
-def ship_key_from(argv) -> str | None:
-    """The value after `--ship` in argv (empty string if the flag has no value), or None if absent."""
-    argv = argv or []
-    if "--ship" in argv:
-        i = argv.index("--ship")
-        return argv[i + 1] if i + 1 < len(argv) else ""
-    return None
+def _default_branch(run, target: Path, repo: str) -> str:
+    if repo:
+        r = run(["gh", "api", f"repos/{repo}", "--jq", ".default_branch"])
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    r = run(["git", "-C", str(target), "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"])
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip().rsplit("/", 1)[-1]
+    return "main"
 
 
-def ship(key: str, paths: list[str], target: Path = Path("."), run=connect._run) -> int:
-    if not KEY_RE.match(key or ""):
-        print(f"  --ship needs a ticket key like KEEL-12 (got '{key}').")
-        return 2
-
+def ship(paths: list[str], target: Path = Path("."), run=connect._run) -> int:
     paths = [p for p in paths if (target / p).exists()]
     if not paths:
-        print("  Nothing to ship (no changed files).")
+        print("  Nothing to ship.")
         return 0
-
     if not connect.gh_ok(run):
         print("  gh is not authenticated — run `gh auth login`, then commit/push yourself.")
         return 1
+
+    # Refuse if there are OTHER uncommitted changes — the lane must carry only emkeel files.
+    status = run(["git", "-C", str(target), "status", "--porcelain"])
+    dirty = [ln[3:] for ln in status.stdout.splitlines() if ln.strip()]
+    stray = [f for f in dirty if f not in paths]
+    if stray:
+        print(f"  You have other uncommitted changes ({', '.join(stray[:3])}…) — "
+              "commit or stash them first, then re-run.")
+        return 1
+
     cfg = connect.load_config(target)
     repo = cfg.repo if cfg else ""
+    default = _default_branch(run, target, repo)
+    orig = run(["git", "-C", str(target), "rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()
+    content = {p: (target / p).read_text(encoding="utf-8") for p in paths}
 
-    branch = f"chore/{key}-emkeel-update"
-    if run(["git", "-C", str(target), "checkout", "-b", branch]).returncode != 0:
-        run(["git", "-C", str(target), "checkout", branch])   # branch exists → reuse it
+    run(["git", "-C", str(target), "fetch", "-q", "origin", default])
+    sha = run(["git", "-C", str(target), "rev-parse", "--short", f"origin/{default}"]).stdout.strip() or "base"
+    from emkeel import __version__
+    branch = f"{MAINT_PREFIX}{__version__}-{sha}"
+
+    run(["git", "-C", str(target), "checkout", "--", *paths])   # clean our paths so the switch is clean
+    if run(["git", "-C", str(target), "checkout", "-B", branch, f"origin/{default}"]).returncode != 0:
+        print(f"  could not fork the maintenance branch from origin/{default}.")
+        return 1
+    for p, c in content.items():
+        (target / p).write_text(c, encoding="utf-8")
     run(["git", "-C", str(target), "add", *paths])
-    commit = run(["git", "-C", str(target), "commit", "-m", f"chore: refresh emkeel wiring ({key})"])
+    commit = run(["git", "-C", str(target), "commit", "-m", f"chore: refresh emkeel wiring ({__version__})"])
     blob = ((commit.stdout or "") + (commit.stderr or "")).lower()
     if commit.returncode != 0 and "nothing to commit" not in blob:
         print(f"  commit failed: {(commit.stderr or commit.stdout).strip()}")
+        if orig:
+            run(["git", "-C", str(target), "checkout", "-q", orig])
         return 1
 
-    print("  Pushing… (a pre-push hook may run — Ctrl-C to skip)")
+    print(f"  Shipping via {branch} (a pre-push hook may run — Ctrl-C to skip)…")
     ok, msg = connect.do_push(run)
     if not ok:
         print(f"  push failed: {msg}")
@@ -68,4 +87,6 @@ def ship(key: str, paths: list[str], target: Path = Path("."), run=connect._run)
         connect.allow_auto_merge(repo, run)
     ok, msg = connect.do_auto_merge(run)
     print("  ✓ auto-merge enabled — it lands when the gates pass." if ok else f"  auto-merge: {msg}")
+    if orig:
+        run(["git", "-C", str(target), "checkout", "-q", orig])   # return you to where you were
     return 0
