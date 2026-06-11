@@ -31,10 +31,15 @@ def gather(target: Path) -> dict:
     """Inspect repo + GitHub state. gh-dependent checks stay None when they can't be determined."""
     st = {"governed": (target / "emkeel.toml").is_file(), "repo": "", "connected": False,
           "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main",
-          "drift": []}
+          "drift": [], "jira_project": "", "branch_key": ""}
     if st["governed"]:
-        from emkeel.update import wiring_drift
+        from emkeel.update import wiring_drift, load_cfg
         st["drift"] = wiring_drift(target)   # generated files that `emkeel update` would refresh
+        cfg = load_cfg(target)
+        st["jira_project"] = cfg.jira_project if cfg else ""
+        br = _run(["git", "-C", str(target), "branch", "--show-current"])
+        bm = re.search(r"[A-Z][A-Z0-9]+-\d+", br.stdout) if br.returncode == 0 else None
+        st["branch_key"] = bm.group(0) if bm else ""
     r = _run(["git", "-C", str(target), "remote", "get-url", "origin"])
     if r.returncode == 0:
         m = re.search(r"github\.com[:/]+([^/]+/[^/.\s]+)", r.stdout.strip())
@@ -66,6 +71,10 @@ def report_lines(st: dict) -> list[str]:
     if st.get("governed") and st.get("drift"):
         out.append(f"  ⚠ {len(st['drift'])} wiring file(s) out of date ({', '.join(st['drift'])})"
                    "   → run: emkeel update")
+    jp, bk = st.get("jira_project"), st.get("branch_key")
+    if jp and bk and bk.split("-")[0] != jp:
+        out.append(f"  ⚠ branch '{bk}' ≠ configured Jira project '{jp}'"
+                   "   → align emkeel.toml or the branch key")
     if not st.get("connected"):
         out += ["  ✗ not connected to GitHub yet",
                 "      → create + push the repo:  gh repo create --source=. --push",

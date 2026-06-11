@@ -37,3 +37,22 @@ def test_gate_silent_when_wiring_current(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _warn_if_stale_wiring()
     assert "::warning::" not in capsys.readouterr().out
+
+
+def test_gate_warns_on_project_mismatch(tmp_path, monkeypatch, capsys):
+    from emkeel.init import Config, apply
+    from emkeel.gates.check_ticket_link import _warn_if_project_mismatch
+    apply(tmp_path, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
+    monkeypatch.chdir(tmp_path)
+    _warn_if_project_mismatch("ECO-1")
+    out = capsys.readouterr().out
+    assert "::warning::" in out and "SCRUM" in out and "ECO-1" in out
+
+
+def test_gate_silent_when_project_matches(tmp_path, monkeypatch, capsys):
+    from emkeel.init import Config, apply
+    from emkeel.gates.check_ticket_link import _warn_if_project_mismatch
+    apply(tmp_path, Config(jira_project="SCRUM", github_repo="o/r"), force=False, dry_run=False)
+    monkeypatch.chdir(tmp_path)
+    _warn_if_project_mismatch("SCRUM-9")
+    assert "::warning::" not in capsys.readouterr().out
