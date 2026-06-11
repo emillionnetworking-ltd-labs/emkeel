@@ -105,3 +105,41 @@ def test_update_no_ship_leaves_pending(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert calls == [] and "no-ship" in out.lower()
     assert (tmp_path / "AGENTS.md").read_text() != "stale"   # refreshed locally
+
+
+def _wd_git(args, cwd):
+    import subprocess
+    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True)
+
+
+def test_wiring_drift_clean_when_origin_current(tmp_path):
+    # origin/main is current → a feature branch with OLD local wiring shows NO drift
+    import subprocess
+    from emkeel.update import wiring_drift
+    origin = tmp_path / "o.git"; subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "w"; work.mkdir()
+    _wd_git(["init", "-q"], work); _wd_git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _wd_git(["config", "user.email", "t@t.co"], work); _wd_git(["config", "user.name", "t"], work)
+    _wd_git(["config", "commit.gpgsign", "false"], work)
+    apply(work, CFG, force=False, dry_run=False)                 # current templates
+    _wd_git(["add", "-A"], work); _wd_git(["commit", "-qm", "init"], work)
+    _wd_git(["remote", "add", "origin", str(origin)], work); _wd_git(["push", "-q", "-u", "origin", "main"], work)
+    _wd_git(["checkout", "-qb", "feat"], work)
+    (work / "AGENTS.md").write_text("# OLD on feature\n")        # local feature branch behind
+    _wd_git(["add", "-A"], work); _wd_git(["commit", "-qm", "feat"], work)
+    assert wiring_drift(work) == []                              # measured vs origin/main → clean
+
+
+def test_wiring_drift_flags_stale_origin(tmp_path):
+    import subprocess
+    from emkeel.update import wiring_drift
+    origin = tmp_path / "o.git"; subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "w"; work.mkdir()
+    _wd_git(["init", "-q"], work); _wd_git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _wd_git(["config", "user.email", "t@t.co"], work); _wd_git(["config", "user.name", "t"], work)
+    _wd_git(["config", "commit.gpgsign", "false"], work)
+    apply(work, CFG, force=False, dry_run=False)
+    (work / "AGENTS.md").write_text("# stale\n")                 # origin will hold an OLD AGENTS.md
+    _wd_git(["add", "-A"], work); _wd_git(["commit", "-qm", "init"], work)
+    _wd_git(["remote", "add", "origin", str(origin)], work); _wd_git(["push", "-q", "-u", "origin", "main"], work)
+    assert "AGENTS.md" in wiring_drift(work)                     # origin/main behind templates → drift

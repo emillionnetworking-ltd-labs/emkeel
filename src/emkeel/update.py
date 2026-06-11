@@ -30,20 +30,45 @@ def load_cfg(target: Path) -> Config | None:
     return cfg
 
 
+def _origin_default(target: Path) -> str | None:
+    """The repo's default branch on origin (main/master/…), or None if there's no usable origin."""
+    import subprocess
+    if "origin" not in subprocess.run(["git", "-C", str(target), "remote"],
+                                      capture_output=True, text=True).stdout.split():
+        return None
+    r = subprocess.run(["git", "-C", str(target), "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+                       capture_output=True, text=True)
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip().rsplit("/", 1)[-1]
+    if subprocess.run(["git", "-C", str(target), "rev-parse", "--verify", "-q", "origin/main"],
+                      capture_output=True).returncode == 0:
+        return "main"
+    return None
+
+
 def wiring_drift(target: Path) -> list[str]:
-    """Generated files whose committed content differs from what the current Emkeel would write
-    (i.e. `emkeel update` would change them). Excludes emkeel.toml (it carries a version stamp that
-    always differs) and the append-only .gitignore/.gitattributes."""
+    """Generated files whose canonical copy differs from what the current Emkeel would write
+    (`emkeel update` would change them). Measured against origin/<default> — the governance source
+    of truth — when there's a remote, so a feature branch behind main does NOT show as drift; against
+    the local tree otherwise. Excludes emkeel.toml (its version stamp always differs)."""
     cfg = load_cfg(target)
     if cfg is None:
         return []
+    import subprocess
+
     from emkeel.init import _files
+    default = _origin_default(target)
     drift = []
     for path, content in _files(cfg).items():
         if path == "emkeel.toml":
             continue
-        p = target / path
-        if p.is_file() and p.read_text(encoding="utf-8") != content:
+        if default:
+            r = subprocess.run(["git", "-C", str(target), "show", f"origin/{default}:{path}"],
+                               capture_output=True, text=True)
+            committed = r.stdout if r.returncode == 0 else ""   # missing on origin → counts as drift
+            if committed != content:
+                drift.append(path)
+        elif (target / path).is_file() and (target / path).read_text(encoding="utf-8") != content:
             drift.append(path)
     return drift
 

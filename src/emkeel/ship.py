@@ -82,22 +82,52 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
         shutil.rmtree(wt, ignore_errors=True)
 
 
+def _clean_local(target: Path, run) -> None:
+    """Remove emkeel-generated changes from the working tree so they don't sit pending or pollute
+    your own commits. ONLY touches files Emkeel owns (the `_files` set) and ONLY when their content
+    is Emkeel's own generated content — never your product work, your specs/records, or hand-edits."""
+    from emkeel.init import _files
+    cfg = load_cfg(target)
+    if cfg is None:
+        return
+    for path, expected in _files(cfg).items():
+        fp = target / path
+        if not fp.is_file():
+            continue
+        status = run(["git", "-C", str(target), "status", "--porcelain", "--", path]).stdout
+        if not status.strip():
+            continue                                  # not dirty
+        if fp.read_text(encoding="utf-8") != expected:
+            continue                                  # you hand-edited it → leave it alone
+        if status.lstrip().startswith("?"):
+            fp.unlink()                               # untracked emkeel file → remove
+        else:
+            run(["git", "-C", str(target), "checkout", "-q", "--", path])   # revert tracked
+
+
 def ship_update(target: Path = Path("."), run=connect._run) -> int:
-    """Refresh the wiring on origin/<default> (regenerate from its own committed config) and ship it."""
+    """Refresh the wiring on origin/<default> (regenerate from its own committed config), ship it,
+    then clean any local emkeel leftovers from your working tree."""
     from emkeel.init import apply
 
     def mutate(wt: Path):
         apply(wt, load_cfg(wt), force=True, dry_run=False)
     from emkeel import __version__
-    return _ship_via_worktree(mutate, f"refresh emkeel wiring ({__version__})", target, run)
+    rc = _ship_via_worktree(mutate, f"refresh emkeel wiring ({__version__})", target, run)
+    if rc == 0:
+        _clean_local(target, run)
+    return rc
 
 
 def ship_set(attr: str, value: str, target: Path = Path("."), run=connect._run) -> int:
-    """Change one emkeel.toml field on origin/<default> and ship it."""
+    """Change one emkeel.toml field on origin/<default>, ship it, then clean local leftovers."""
     from emkeel.init import _toml
 
     def mutate(wt: Path):
         cfg = load_cfg(wt)
         setattr(cfg, attr, value)
         (wt / "emkeel.toml").write_text(_toml(cfg), encoding="utf-8")
-    return _ship_via_worktree(mutate, f"set {attr} = {value} (emkeel.toml)", target, run)
+    rc = _ship_via_worktree(mutate, f"set {attr} = {value} (emkeel.toml)", target, run)
+    if rc == 0:
+        _clean_local(target, run)
+    return rc
