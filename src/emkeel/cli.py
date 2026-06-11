@@ -9,6 +9,7 @@ Subcommands:
   emkeel connect         automate the GitHub side via gh (branch protection, secrets; new repo: create+push)
   emkeel sync            after the adopt PR merges: checkout default + pull + delete the merged branch
   emkeel update          refresh the generated wiring to the installed version (after pipx upgrade)
+  emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo)
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 import sys
 
-_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|version> [args]   (try: emkeel setup)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,6 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "update":
         from emkeel.update import main as update_main
         return update_main(rest)
+    if cmd == "set":
+        from emkeel.setcfg import main as set_main
+        return set_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)

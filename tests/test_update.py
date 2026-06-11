@@ -55,3 +55,28 @@ def test_wiring_drift_ignores_toml_stamp(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     (tmp_path / "emkeel.toml").write_text('[github]\nrepo = "o/r"\n[emkeel]\ngenerated_with = "0.0.1"\n')
     assert "emkeel.toml" not in wiring_drift(tmp_path)
+
+
+def test_update_noop_when_current(tmp_path, monkeypatch, capsys):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    monkeypatch.chdir(tmp_path)
+    from emkeel.update import main as update_main
+    assert update_main() == 0
+    assert "already current" in capsys.readouterr().out.lower()   # 2nd run = honest no-op
+
+
+def test_update_reports_only_changed(tmp_path, monkeypatch, capsys):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("stale")
+    monkeypatch.chdir(tmp_path)
+    from emkeel.update import main as update_main
+    assert update_main() == 0
+    out = capsys.readouterr().out
+    assert "updated" in out and "AGENTS.md" in out and "already current" in out  # only AGENTS.md changed
+
+
+def test_load_cfg_preserves_source(tmp_path):
+    from emkeel.update import load_cfg
+    src = "git+https://x-access-token:${T}@github.com/o/emkeel.git"
+    apply(tmp_path, Config(github_repo="o/r", emkeel_source=src), force=False, dry_run=False)
+    assert load_cfg(tmp_path).emkeel_source == src
