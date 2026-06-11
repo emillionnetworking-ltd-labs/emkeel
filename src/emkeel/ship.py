@@ -57,6 +57,12 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
             print(f"  worktree add failed: {(r.stderr or r.stdout).strip()}")
             return 1
         mutate(Path(wt))                                  # caller writes the emkeel changes here
+        # A pure version-stamp bump of emkeel.toml is noise — drop it so we don't open an empty PR.
+        toml = Path(wt) / "emkeel.toml"
+        if toml.is_file():
+            head = run(["git", "-C", wt, "show", "HEAD:emkeel.toml"]).stdout
+            if _strip_stamp(toml.read_text(encoding="utf-8")) == _strip_stamp(head):
+                run(["git", "-C", wt, "checkout", "-q", "--", "emkeel.toml"])
         if not run(["git", "-C", wt, "status", "--porcelain"]).stdout.strip():
             print(f"  origin/{default} is already current — nothing to ship.")
             return 0
