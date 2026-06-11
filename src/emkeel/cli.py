@@ -9,7 +9,8 @@ Subcommands:
   emkeel connect         automate the GitHub side via gh (branch protection, secrets; new repo: create+push)
   emkeel sync            after the adopt PR merges: checkout default + pull + delete the merged branch
   emkeel update          refresh the generated wiring to the installed version (after pipx upgrade)
-  emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo)
+                         add `--ship <KEY>` to branch→commit→push→PR→auto-merge the refresh
+  emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo); --ship <KEY> too
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 

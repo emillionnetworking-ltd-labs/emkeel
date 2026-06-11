@@ -80,3 +80,15 @@ def test_load_cfg_preserves_source(tmp_path):
     src = "git+https://x-access-token:${T}@github.com/o/emkeel.git"
     apply(tmp_path, Config(github_repo="o/r", emkeel_source=src), force=False, dry_run=False)
     assert load_cfg(tmp_path).emkeel_source == src
+
+
+def test_update_ship_invokes_governance(tmp_path, monkeypatch):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("stale")          # force a real change
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    import emkeel.ship as shipmod
+    monkeypatch.setattr(shipmod, "ship", lambda key, paths, target=None: calls.append((key, paths)) or 0)
+    from emkeel.update import main as update_main
+    assert update_main(["--ship", "KEEL-9"]) == 0
+    assert calls and calls[0][0] == "KEEL-9" and "AGENTS.md" in calls[0][1]
