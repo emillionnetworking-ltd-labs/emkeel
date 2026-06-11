@@ -139,3 +139,9 @@ def test_scaffolds_strategy_skill(tmp_path):
     assert "name: strategy" in txt
     assert "emkeel strategy new" in txt and "emkeel strategy check" in txt   # leans on the tested CLI
     assert "human gate" in txt.lower() and "from memory" in txt.lower()      # anti-hallucination rules
+
+
+def test_ci_includes_strategy_quality_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    assert "check_strategy_quality" in ci
