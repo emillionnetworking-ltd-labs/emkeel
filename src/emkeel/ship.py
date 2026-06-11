@@ -82,10 +82,16 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
         shutil.rmtree(wt, ignore_errors=True)
 
 
+def _strip_stamp(text: str) -> str:
+    """emkeel.toml minus its `generated_with` version-stamp line (the stamp differs by version)."""
+    return "\n".join(ln for ln in text.splitlines() if not ln.strip().startswith("generated_with"))
+
+
 def _clean_local(target: Path, run) -> None:
     """Remove emkeel-generated changes from the working tree so they don't sit pending or pollute
-    your own commits. ONLY touches files Emkeel owns (the `_files` set) and ONLY when their content
-    is Emkeel's own generated content — never your product work, your specs/records, or hand-edits."""
+    your own commits. ONLY touches files Emkeel owns (the `_files` set) and ONLY when the change is
+    Emkeel's own (a regenerated file, or just emkeel.toml's version stamp) — never your product work,
+    your specs/records, or real edits (e.g. a project_key you changed)."""
     from emkeel.init import _files
     cfg = load_cfg(target)
     if cfg is None:
@@ -97,7 +103,13 @@ def _clean_local(target: Path, run) -> None:
         status = run(["git", "-C", str(target), "status", "--porcelain", "--", path]).stdout
         if not status.strip():
             continue                                  # not dirty
-        if fp.read_text(encoding="utf-8") != expected:
+        local = fp.read_text(encoding="utf-8")
+        if path == "emkeel.toml":
+            # clean only when the sole change is the version stamp; keep real value edits.
+            committed = run(["git", "-C", str(target), "show", f"HEAD:{path}"]).stdout
+            if _strip_stamp(local) != _strip_stamp(committed):
+                continue
+        elif local != expected:
             continue                                  # you hand-edited it → leave it alone
         if status.lstrip().startswith("?"):
             fp.unlink()                               # untracked emkeel file → remove
