@@ -10,6 +10,7 @@ Subcommands:
   emkeel sync            after the adopt PR merges: checkout default + pull + delete the merged branch
   emkeel update          refresh the wiring AND ship it (maintenance lane → PR → auto-merge); --no-ship to leave pending
   emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo) and ship it; --no-ship too
+  emkeel strategy …      scaffold (new <topic>) + lint (check) researched strategy artifacts
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 import sys
 
-_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|version> [args]   (try: emkeel setup)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "set":
         from emkeel.setcfg import main as set_main
         return set_main(rest)
+    if cmd == "strategy":
+        from emkeel.strategy import main as strategy_main
+        return strategy_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)
