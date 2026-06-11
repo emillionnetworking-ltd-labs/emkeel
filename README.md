@@ -126,9 +126,11 @@ pipx uninstall emkeel
 
 | Command | What it does |
 | --- | --- |
-| `/strategy <topic>` *(skill)* | research + decide a path for a topic (a module, security, a technology…) — grounded, source-cited, **human-approved** |
 | `emkeel strategy new <topic>` | scaffold a structured strategy doc |
-| `emkeel strategy check` | lint strategies — every option must cite a source (the anti-hallucination gate) |
+| `emkeel strategy check` | lint strategies — every option must cite a source |
+
+> **`/strategy <topic>`** is a **skill run inside the AI agent** (not a shell command): it researches +
+> debates the options and produces the strategy doc that the two commands above scaffold and lint.
 
 **Remove**
 
@@ -143,6 +145,23 @@ pipx uninstall emkeel
 | --- | --- |
 | `pipx upgrade emkeel` | update the Emkeel tool |
 | `emkeel update` | refresh an adopted repo's wiring to the installed version — **ships the refresh via a PR + auto-merge** (`--no-ship` to leave it local) |
+
+## The gates (what CI enforces — not commands you run)
+
+These run **server-side** on every PR (GitHub Actions + branch protection). You don't invoke them;
+they decide whether a PR can merge. `"done"` = these pass.
+
+| Gate | Enforces |
+| --- | --- |
+| **ticket link** | the branch/PR references a Jira ticket (or it's the `emkeel-maint/` lane) |
+| **plan present** | a `feat/` ticket carries a spec in `emkeel-governance/specs/<KEY>.md` |
+| **acceptance criteria** | that spec has an "Acceptance Criteria" section |
+| **strategy link** | once a strategy exists, every feature declares `Strategy: <topic>` |
+| **strategy quality** | every strategy doc is grounded — each option cites a source |
+| **maintenance scope** | the `emkeel-maint/` lane may touch only Emkeel-managed files |
+| **test suite** | the full test suite passes |
+
+Each is dormant until it applies (e.g. the strategy gates stay quiet until you create your first strategy).
 
 ## Keeping up to date
 
