@@ -143,3 +143,27 @@ def test_wiring_drift_flags_stale_origin(tmp_path):
     _wd_git(["add", "-A"], work); _wd_git(["commit", "-qm", "init"], work)
     _wd_git(["remote", "add", "origin", str(origin)], work); _wd_git(["push", "-q", "-u", "origin", "main"], work)
     assert "AGENTS.md" in wiring_drift(work)                     # origin/main behind templates → drift
+
+
+def test_origin_jira_project_reads_origin(tmp_path):
+    # origin/main declares ECO; the local feature branch still declares SCRUM → reads ECO (origin)
+    import subprocess
+    from emkeel.update import origin_jira_project
+    origin = tmp_path / "o.git"; subprocess.run(["git", "init", "--bare", "-q", str(origin)], check=True)
+    work = tmp_path / "w"; work.mkdir()
+    _wd_git(["init", "-q"], work); _wd_git(["symbolic-ref", "HEAD", "refs/heads/main"], work)
+    _wd_git(["config", "user.email", "t@t.co"], work); _wd_git(["config", "user.name", "t"], work)
+    _wd_git(["config", "commit.gpgsign", "false"], work)
+    apply(work, Config(jira_project="ECO", github_repo="o/r"), force=False, dry_run=False)
+    _wd_git(["add", "-A"], work); _wd_git(["commit", "-qm", "init"], work)
+    _wd_git(["remote", "add", "origin", str(origin)], work); _wd_git(["push", "-q", "-u", "origin", "main"], work)
+    _wd_git(["checkout", "-qb", "feat"], work)
+    (work / "emkeel.toml").write_text((work / "emkeel.toml").read_text().replace('project_key = "ECO"', 'project_key = "SCRUM"'))
+    _wd_git(["add", "-A"], work); _wd_git(["commit", "-qm", "feat"], work)
+    assert origin_jira_project(work) == "ECO"           # origin/main, not the local SCRUM
+
+
+def test_origin_jira_project_local_fallback(tmp_path):
+    from emkeel.update import origin_jira_project
+    apply(tmp_path, Config(jira_project="LOCAL", github_repo="o/r"), force=False, dry_run=False)
+    assert origin_jira_project(tmp_path) == "LOCAL"     # no remote → local emkeel.toml

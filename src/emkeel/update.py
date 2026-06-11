@@ -46,6 +46,25 @@ def _origin_default(target: Path) -> str | None:
     return None
 
 
+def origin_jira_project(target: Path) -> str:
+    """The project_key declared on origin/<default> (the governance source of truth), so a feature
+    branch that still declares the old key doesn't show a false concordance warning. Local fallback
+    when there's no remote."""
+    import subprocess
+    import tomllib
+    default = _origin_default(target)
+    if default:
+        r = subprocess.run(["git", "-C", str(target), "show", f"origin/{default}:emkeel.toml"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            try:
+                return tomllib.loads(r.stdout).get("jira", {}).get("project_key", "")
+            except Exception:
+                return ""
+    cfg = load_cfg(target)
+    return cfg.jira_project if cfg else ""
+
+
 def wiring_drift(target: Path) -> list[str]:
     """Generated files whose canonical copy differs from what the current Emkeel would write
     (`emkeel update` would change them). Measured against origin/<default> — the governance source
