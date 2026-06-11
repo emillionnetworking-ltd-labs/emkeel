@@ -49,6 +49,8 @@ def wiring_drift(target: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from emkeel.ship import ship, ship_key_from
+    ship_key = ship_key_from(argv)
     target = Path(".")
     cfg = load_cfg(target)
     if cfg is None or not cfg.github_repo:
@@ -87,7 +89,11 @@ def main(argv: list[str] | None = None) -> int:
     n_un = len(results) - len(changed)
     if n_un:
         print(f"  ({n_un} file(s) already current)")
-    print("\n(your values + emkeel-governance/ are unchanged — commit the refreshed files)")
+    if ship_key is not None:
+        print(f"\nShipping the refresh as {ship_key} (branch → PR → auto-merge)…")
+        return ship(ship_key, [p for _, p in changed], target)
+    print("\n(your values + emkeel-governance/ are unchanged — commit the refreshed files,"
+          " or re-run with `--ship <KEY>`)")
     return 0
 
 

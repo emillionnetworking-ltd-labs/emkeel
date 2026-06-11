@@ -20,9 +20,14 @@ FIELDS = {"jira-project": "jira_project", "jira-url": "jira_url", "github-repo":
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = argv if argv is not None else sys.argv[1:]
+    from emkeel.ship import ship, ship_key_from
+    argv = list(argv if argv is not None else sys.argv[1:])
+    ship_key = ship_key_from(argv)
+    if ship_key is not None:
+        i = argv.index("--ship")
+        del argv[i:i + 2]                              # strip `--ship <KEY>` before positional parsing
     if len(argv) != 2 or argv[0] not in FIELDS:
-        print(f"usage: emkeel set <{'|'.join(FIELDS)}> <value>", file=sys.stderr)
+        print(f"usage: emkeel set <{'|'.join(FIELDS)}> <value> [--ship <KEY>]", file=sys.stderr)
         return 2
     field, value = argv
     target = Path(".")
@@ -38,7 +43,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     setattr(cfg, attr, value)
     (target / "emkeel.toml").write_text(_toml(cfg), encoding="utf-8")
-    print(f"emkeel set — {field}: '{old}' → '{value}'  (emkeel.toml updated; commit it)")
+    print(f"emkeel set — {field}: '{old}' → '{value}'  (emkeel.toml updated)")
+    if ship_key is not None:
+        print(f"Shipping the change as {ship_key} (branch → PR → auto-merge)…")
+        return ship(ship_key, ["emkeel.toml"], target)
+    print("  commit it, or re-run with `--ship <KEY>`.")
     return 0
 
 
