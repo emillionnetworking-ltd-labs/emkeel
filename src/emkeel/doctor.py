@@ -33,10 +33,9 @@ def gather(target: Path) -> dict:
           "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main",
           "drift": [], "jira_project": "", "branch_key": ""}
     if st["governed"]:
-        from emkeel.update import wiring_drift, load_cfg
+        from emkeel.update import origin_jira_project, wiring_drift
         st["drift"] = wiring_drift(target)   # generated files that `emkeel update` would refresh
-        cfg = load_cfg(target)
-        st["jira_project"] = cfg.jira_project if cfg else ""
+        st["jira_project"] = origin_jira_project(target)   # project on origin/<default>, not the local branch
         br = _run(["git", "-C", str(target), "branch", "--show-current"])
         bm = re.search(r"[A-Z][A-Z0-9]+-\d+", br.stdout) if br.returncode == 0 else None
         st["branch_key"] = bm.group(0) if bm else ""
