@@ -229,6 +229,14 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
 
 ## Separation
 - `emkeel-governance/` holds artifacts (specs/adr/records/strategy); it is `export-ignore` (never distributed).
+
+## Documentation (docs/)
+- `docs/` = product reference documentation (architecture, how-it-works) — human-facing, living.
+  Governance (strategy/adr/specs/records) lives in `emkeel-governance/`, **never** in `docs/`.
+- Specs that mirror the code (OpenAPI, data model) are **regenerated** from the source — don't
+  hand-maintain a frozen snapshot (it drifts and misleads).
+- `docs/archive/` holds preserved-but-inactive docs; each carries a header marking it historical.
+- A dead doc → delete it (git history is the archive); don't keep a "to-delete-later" pile.
 """
 
 

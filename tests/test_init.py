@@ -145,3 +145,9 @@ def test_ci_includes_strategy_quality_gate(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
     assert "check_strategy_quality" in ci
+
+
+def test_agents_md_mentions_docs_convention(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    agents = (tmp_path / "AGENTS.md").read_text()
+    assert "product reference" in agents and "docs/archive/" in agents
