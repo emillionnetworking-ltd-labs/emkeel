@@ -8,8 +8,11 @@ source, deterministically and offline (stdlib only).
 
 Sources are classified into three kinds, each with its own verdict:
 
-1. **Repo path with line** (`path/file.ext:NN` or `:NN-MM`, or `file.ext:NN`) — MUST resolve against the
-   repo root: the file exists and the line/range is within the file's line count. Else **FAIL**.
+1. **Repo path** — a *clean* path (a `/` separator, a `.ext`, no spaces/prose) MUST resolve against the
+   repo root. With a line (`path/file.ext:NN` or `:NN-MM`): the file exists **and** the line/range is in
+   range. Without a line (`path/file.ext`): the file exists (existence-only — an invented path can't dodge
+   resolution by omitting the line). Else **FAIL**. A bare filename (no `/`) or a path with prose stays
+   external (case 3), never a FAIL.
 2. **URL** (`http://` / `https://`) — MUST be syntactically well-formed (stdlib `urllib.parse`, no network).
    Malformed → **FAIL**. Reachability is never checked in the default path (the gate is hermetic/offline).
    `emkeel strategy check --check-urls` opts into a non-blocking `HEAD` for *local* use; failures there are
@@ -35,7 +38,8 @@ Sources are classified into three kinds, each with its own verdict:
   (file:line + NIST/FIDO/RFC9700 URLs + an external frozen-repo citation). Bump 0.1.64.
 
 ## Acceptance Criteria
-1. A `file:line` that resolves → PASS; a nonexistent file → FAIL; a line/range out of range → FAIL.
+1. A `file:line` that resolves → PASS; a nonexistent file → FAIL; a line/range out of range → FAIL. A clean
+   repo path *without* a line resolves existence-only: existing → PASS, invented/nonexistent → FAIL.
 2. A well-formed URL → PASS; a malformed URL → FAIL; no network in the default path.
 3. An external/unverifiable source → WARN (not FAIL) and counted in the summary.
 4. The `auth.md` fixture (replicating the real mix) still PASSES — its external citations are WARN, not FAIL.

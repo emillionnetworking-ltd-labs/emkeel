@@ -73,10 +73,12 @@ def test_lint_flags_option_without_source():
 def test_classify_source():
     assert classify_source("src/auth.py:10") == "repo"
     assert classify_source("src/auth.py:10-20") == "repo"
+    assert classify_source("src/auth.py") == "repo"                  # clean path with '/' → repo (existence)
     assert classify_source("https://example.com/x") == "url"
     assert classify_source("https//typo-no-colon") == "url"          # url *intent* → judged malformed later
-    assert classify_source("AUTH-v2.md §5 D-002") == "external"
-    assert classify_source("src/auth.py") == "external"              # no line → not a repo source
+    assert classify_source("AUTH-v2.md §5 D-002") == "external"      # prose/spaces → not a clean path
+    assert classify_source("auth.py") == "external"                  # bare filename, no '/' → external
+    assert classify_source("auth.py:10") == "external"               # bare filename + line, no '/' → external
 
 
 # ── AC2: URL well-formedness, offline ──────────────────────────────────────────
@@ -104,6 +106,26 @@ def test_repo_problem_line_out_of_range(tmp_path):
     assert "out of range" in _repo_problem("src/auth.py:99", tmp_path)
     assert "out of range" in _repo_problem("src/auth.py:10-99", tmp_path)
     assert "out of range" in _repo_problem("src/auth.py:15-5", tmp_path)   # b < a
+
+
+# ── path-only repo source (no line) → existence-only resolution ────────────────
+
+def test_repo_path_no_line_existing_passes(tmp_path):
+    _repo(tmp_path, "src/auth.py", 20)
+    assert _repo_problem("src/auth.py", tmp_path) is None             # exists → PASS (no line needed)
+
+
+def test_repo_path_no_line_missing_fails(tmp_path):
+    # an invented path can't dodge resolution by omitting the line.
+    assert "not found" in _repo_problem("src/nope.py", tmp_path)
+
+
+def test_review_repo_path_no_line_missing_fails(tmp_path):
+    _repo(tmp_path, "src/auth.py", 20)
+    doc = VALID.replace("| 2 | server sessions | https://x.com/sessions |",
+                        "| 2 | server sessions | src/nope.py |")
+    fails, _warns, _u = review_strategy(doc, tmp_path)
+    assert any("not found" in f for f in fails)
 
 
 # ── AC3: external → WARN, counted ──────────────────────────────────────────────

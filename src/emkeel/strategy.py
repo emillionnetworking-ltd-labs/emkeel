@@ -23,9 +23,10 @@ STRATEGY_DIR = "emkeel-governance/strategy"
 REQUIRED_SECTIONS = ("Goal", "Context", "Options", "Recommendation")
 _PLACEHOLDERS = {"", "-", "—", "tbd", "todo", "n/a", "<source>"}
 
-# A repo source: a path ending in a `.ext`, then `:NN` or `:NN-MM` (line / range). The line is required;
-# a bare path without a line is treated as external (unverifiable) rather than a repo source.
-_RE_REPO = re.compile(r"^(?P<path>[\w./\-]+\.[A-Za-z0-9]+):(?P<a>\d+)(?:-(?P<b>\d+))?$")
+# A repo source: a CLEAN path (no spaces/prose) with a `/` separator and a `.ext`, optionally followed by
+# `:NN` or `:NN-MM` (line / range). With a line → resolve file + line/range; without a line → existence only.
+# The `/` requirement (checked in classify_source) keeps bare filenames and prose citations off this path.
+_RE_REPO = re.compile(r"^(?P<path>[\w./\-]+\.[A-Za-z0-9]+)(?::(?P<a>\d+)(?:-(?P<b>\d+))?)?$")
 # URL *intent*: starts with http/https as a word. Well-formedness is judged separately (urlparse), so a
 # typo'd `https//host` is still recognised as a URL and FAILs as malformed instead of passing as external.
 _RE_URL_INTENT = re.compile(r"(?i)^https?\b")
@@ -105,7 +106,7 @@ def classify_source(src: str) -> str:
     s = src.strip()
     if _RE_URL_INTENT.match(s):
         return "url"
-    if _RE_REPO.fullmatch(s):
+    if "/" in s and _RE_REPO.fullmatch(s):          # clean repo path (a bare filename or prose stays external)
         return "repo"
     return "external"
 
@@ -119,15 +120,21 @@ def _url_problem(src: str) -> str | None:
 
 
 def _repo_problem(src: str, repo_root: Path) -> str | None:
-    """Resolve a `path:line[-line]` source against the repo root. None = it resolves."""
+    """Resolve a `path[:line[-line]]` source against the repo root. None = it resolves.
+
+    With a line → file must exist AND the line/range must be in range. Without a line → existence only
+    (so an invented bare path can't dodge resolution just by omitting the line)."""
     m = _RE_REPO.fullmatch(src.strip())
     if not m:                                            # not reached via classify_source, but be safe
-        return "not a resolvable file:line source"
-    path, a = m.group("path"), int(m.group("a"))
-    b = int(m.group("b")) if m.group("b") else None
+        return "not a resolvable repo path"
+    path = m.group("path")
     f = repo_root / path
     if not f.is_file():
         return f"file not found: {path}"
+    if m.group("a") is None:                             # path-only (no line) → existence is enough
+        return None
+    a = int(m.group("a"))
+    b = int(m.group("b")) if m.group("b") else None
     n = len(f.read_text(encoding="utf-8", errors="replace").splitlines())
     if a < 1 or a > n:
         return f"line {a} out of range ({path} has {n} lines)"
