@@ -19,11 +19,15 @@ def load_cfg(target: Path) -> Config | None:
     if not p.is_file():
         return None
     d = tomllib.loads(p.read_text(encoding="utf-8"))
+    github = d.get("github", {})
     cfg = Config(
         jira_url=d.get("jira", {}).get("base_url", ""),
         jira_project=d.get("jira", {}).get("project_key", ""),
-        github_repo=d.get("github", {}).get("repo", ""),
+        github_repo=github.get("repo", ""),
     )
+    rc = github.get("required_checks")
+    if rc:                            # absent → keep the default ["gates"] (backward-compatible)
+        cfg.required_checks = [str(c) for c in rc]
     src = d.get("emkeel", {}).get("source")
     if src:                       # preserve a custom (e.g. private-fork) install pin — don't clobber it
         cfg.emkeel_source = src

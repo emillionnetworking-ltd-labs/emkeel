@@ -13,6 +13,21 @@ def test_load_cfg_reads_emkeel_toml(tmp_path):
     assert cfg.jira_url == "https://x.atlassian.net"
 
 
+def test_load_cfg_required_checks_default(tmp_path):
+    # absent key → backward-compatible default of just ["gates"].
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    assert load_cfg(tmp_path).required_checks == ["gates"]
+
+
+def test_load_cfg_required_checks_declared(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    toml = (tmp_path / "emkeel.toml").read_text()
+    toml = toml.replace('repo = "o/r"\n',
+                        'repo = "o/r"\nrequired_checks = ["gates", "Security Gate (All Checks)"]\n')
+    (tmp_path / "emkeel.toml").write_text(toml)
+    assert load_cfg(tmp_path).required_checks == ["gates", "Security Gate (All Checks)"]
+
+
 def test_load_cfg_missing(tmp_path):
     assert load_cfg(tmp_path) is None
 

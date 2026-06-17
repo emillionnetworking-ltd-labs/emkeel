@@ -37,6 +37,10 @@ class Config:
     jira_project: str = ""
     github_repo: str = ""
     emkeel_source: str = field(default_factory=_default_source)
+    # Status-check contexts the repo declares MUST be required on the default branch (branch protection).
+    # `emkeel doctor` checks these are enforced. Default = just emkeel's own `gates`; a repo with extra
+    # CI gates (e.g. a security pipeline) lists them here so doctor catches "the check exists but isn't enforced".
+    required_checks: list[str] = field(default_factory=lambda: ["gates"])
 
 
 @dataclass
@@ -108,7 +112,11 @@ def _toml(cfg: Config) -> str:
         f'base_url = "{cfg.jira_url}"\n'
         f'project_key = "{cfg.jira_project}"\n\n'
         "[github]\n"
-        f'repo = "{cfg.github_repo}"\n\n'
+        f'repo = "{cfg.github_repo}"\n'
+        "# required_checks: status-check contexts that MUST be required on the default branch.\n"
+        "# `emkeel doctor` verifies they're enforced (catches \"the check exists but isn't required\").\n"
+        "# `gates` is always checked. Add your other CI gates here, e.g.:\n"
+        '# required_checks = ["gates", "Security Gate (All Checks)"]\n\n'
         "[emkeel]\n"
         f'source = "{cfg.emkeel_source}"\n'
         f'generated_with = "{__version__}"   # the Emkeel version that wrote this wiring (emkeel doctor checks it)\n'
@@ -319,6 +327,8 @@ def connection_checklist(cfg: Config) -> str:
         "",
         "  3. Branch protection on 'main' (require the 'gates' check + a PR):",
         f"     {base}/settings/branches",
+        "     (Declaring extra CI gates in emkeel.toml `required_checks` makes `emkeel doctor`",
+        "      verify each one is actually enforced — not just present.)",
         "",
         "  4. (optional) GitHub for Jira app (links commits/PRs to tickets):",
         "     https://github.com/marketplace/jira-software-github",
