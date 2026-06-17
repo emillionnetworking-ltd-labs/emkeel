@@ -62,6 +62,14 @@ jobs:
         if: github.event_name == 'pull_request'
         run: python -m emkeel.gates.check_strategy_quality
 
+      # Gate: el norte gobernado (strategy/*.md) solo se cambia en una rama strategy/<TICKET>. N/A si el PR no lo toca.
+      - name: "Gate — strategy change (north star is lane-gated)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_strategy_change
+
       # Gate: la suite completa de tests (memoria durable anti-regresión).
       - name: "Gate — tests"
         run: pytest -q

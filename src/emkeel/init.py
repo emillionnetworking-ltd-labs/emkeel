@@ -174,6 +174,12 @@ jobs:
       - name: "Gate - strategy quality (every strategy doc is sourced + complete)"
         if: github.event_name == 'pull_request'
         run: python -m emkeel.gates.check_strategy_quality
+      - name: "Gate - strategy change (north star only on a strategy/ lane)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+          EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
+        run: python -m emkeel.gates.check_strategy_change
 """
 
 
@@ -224,8 +230,11 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
 - **Before working a feature, read the strategy it serves and align to it.** Declare it in the
   spec with a line `Strategy: <area>` (or `Strategy: none` for a deliberate standalone).
 - Once any strategy exists, the `check_strategy_link` gate requires that line — so no feature
-  merges without a conscious strategy decision. To change direction, update the strategy file
-  (human-approved) — never drift silently.
+  merges without a conscious strategy decision.
+- **Changing the north star is a deliberate act on its own lane.** A PR that creates, edits, or
+  deletes a `strategy/*.md` MUST be on a `strategy/<KEY-123>-slug` branch (its own ticket,
+  human-approved) — the `check_strategy_change` gate FAILS a `feat/`/`fix/` PR that touches it.
+  Never drift the strategy silently inside a feature to make the code fit.
 
 ## Separation
 - `emkeel-governance/` holds artifacts (specs/adr/records/strategy); it is `export-ignore` (never distributed).
