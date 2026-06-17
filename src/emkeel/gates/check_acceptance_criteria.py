@@ -15,12 +15,11 @@ from pathlib import Path
 
 from emkeel.gates.check_plan_present import find_ticket_key, spec_path_for, spec_required
 
-_HEADING_RE = re.compile(r"^#{1,6}\s*acceptance\s+criteria\s*$", re.IGNORECASE | re.MULTILINE)
-
-
-def has_acceptance_criteria(text: str) -> bool:
-    """True if the text has an 'Acceptance Criteria' heading followed by some content."""
-    m = _HEADING_RE.search(text)
+def has_section(text: str, name: str) -> bool:
+    """True if `text` has a markdown heading named `name` followed by some content (not just the
+    next heading). Generic so sibling gates can reuse one tested section-detector (e.g. 'Alignment')."""
+    pattern = r"^#{1,6}\s*" + r"\s+".join(re.escape(w) for w in name.split()) + r"\s*$"
+    m = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
     if not m:
         return False
     for line in text[m.end():].splitlines():
@@ -31,6 +30,11 @@ def has_acceptance_criteria(text: str) -> bool:
             return False
         return True  # found real content under the heading
     return False
+
+
+def has_acceptance_criteria(text: str) -> bool:
+    """True if the text has an 'Acceptance Criteria' heading followed by some content."""
+    return has_section(text, "acceptance criteria")
 
 
 def main() -> int:

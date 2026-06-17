@@ -180,6 +180,11 @@ jobs:
           EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
           EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
         run: python -m emkeel.gates.check_strategy_change
+      - name: "Gate - strategy alignment (feature acknowledges the north star)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+        run: python -m emkeel.gates.check_strategy_alignment
 """
 
 
@@ -229,6 +234,9 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
   architecture, parameters, non-goals). Created once, human-approved, committed.
 - **Before working a feature, read the strategy it serves and align to it.** Declare it in the
   spec with a line `Strategy: <area>` (or `Strategy: none` for a deliberate standalone).
+- When a spec declares `Strategy: <area>`, it must also carry an `## Alignment` section that lists
+  which north-star decisions/constraints the feature implements or touches — the `check_strategy_alignment`
+  gate requires it to exist and be non-empty (the human judges whether the content is true at the PR).
 - Once any strategy exists, the `check_strategy_link` gate requires that line — so no feature
   merges without a conscious strategy decision.
 - **Changing the north star is a deliberate act on its own lane.** A PR that creates, edits, or
