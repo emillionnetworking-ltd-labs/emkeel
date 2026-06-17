@@ -1,10 +1,19 @@
 """Tests for the acceptance-criteria gate. Born with main() coverage (KEEL-2 lesson)."""
 
-from emkeel.gates.check_acceptance_criteria import has_acceptance_criteria, main
+from emkeel.gates.check_acceptance_criteria import has_acceptance_criteria, has_section, main
 
 WITH = "# T\n\n## Acceptance Criteria\n- the thing works\n"
 WITHOUT = "# T\n\n## Plan\n- do stuff\n"
 EMPTY_SECTION = "# T\n\n## Acceptance Criteria\n\n## Anti-regression\n- x\n"
+
+
+def test_has_section_generic():
+    # the generalized helper backs has_acceptance_criteria; multi-word names match flexible whitespace.
+    assert has_section("## Alignment\n- x\n", "alignment") is True
+    assert has_section("## Alignment\n\n## Next\n", "alignment") is False     # empty section
+    assert has_section("## Plan\n- x\n", "alignment") is False               # absent
+    assert has_section("## Alignment", "alignment") is False                 # heading at EOF, no body
+    assert has_section("###  acceptance   criteria \n- x\n", "acceptance criteria") is True
 
 
 def test_detects_section_with_content():

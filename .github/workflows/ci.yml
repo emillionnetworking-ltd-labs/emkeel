@@ -70,6 +70,13 @@ jobs:
           EMKEEL_BASE_REF: ${{ github.base_ref }}
         run: python -m emkeel.gates.check_strategy_change
 
+      # Gate: un feature que sirve a una estrategia debe ACUSAR su alineación (sección Alignment). Dormant si no hay estrategias.
+      - name: "Gate — strategy alignment (feature acknowledges the north star)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_strategy_alignment
+
       # Gate: la suite completa de tests (memoria durable anti-regresión).
       - name: "Gate — tests"
         run: pytest -q
