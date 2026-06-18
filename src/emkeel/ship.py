@@ -17,9 +17,8 @@ import tempfile
 from pathlib import Path
 
 from emkeel import connect
+from emkeel.lanes import MAINT_PREFIX  # single source of truth (re-exported for back-compat)
 from emkeel.update import load_cfg
-
-MAINT_PREFIX = "emkeel-maint/"
 
 
 def inflight_maint_pr(repo: str, run=connect._run) -> int | None:

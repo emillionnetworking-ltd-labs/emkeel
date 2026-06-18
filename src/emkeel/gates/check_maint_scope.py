@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 from emkeel.init import APPEND_LINES, Config, _files
+from emkeel.lanes import is_maint_lane
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
@@ -32,7 +33,7 @@ def changed_files(base: str, run=_run) -> list[str]:
 
 def main() -> int:
     branch = os.environ.get("EMKEEL_BRANCH", "")
-    if not branch.startswith("emkeel-maint/"):
+    if not is_maint_lane(branch):
         print(f"OK: '{branch}' is not a maintenance branch; scope check N/A.")
         return 0
 
