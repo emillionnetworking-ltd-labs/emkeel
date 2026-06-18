@@ -64,3 +64,68 @@ def test_ticket_link_accepts_maint_branch(monkeypatch, capsys):
     monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
     assert main() == 0                                   # no Jira ticket required for the lane
     assert "maintenance" in capsys.readouterr().out.lower()
+
+
+# ── existence verification (KEEL-83): gate now checks the ticket EXISTS in Jira ─────────
+
+import emkeel.jira as J
+from emkeel.gates.check_ticket_link import main
+
+
+def _no_secrets(monkeypatch):
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def _with_secrets(monkeypatch):
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+
+
+def test_no_key_still_fails(monkeypatch):
+    _no_secrets(monkeypatch)
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/no-ticket-here")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    assert main() == 1
+
+
+def test_secrets_absent_is_syntax_only_warning(monkeypatch, capsys):
+    _no_secrets(monkeypatch)
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/KEEL-78-x")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    assert main() == 0                                   # degrades, non-blocking
+    out = capsys.readouterr().out
+    assert "::warning::" in out and "existence" in out.lower()
+
+
+def test_secrets_present_and_ticket_exists_passes(monkeypatch, capsys):
+    _with_secrets(monkeypatch)
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/KEEL-78-x")
+    monkeypatch.setattr(J, "issue_status", lambda key: 200)
+    assert main() == 0
+    assert "exists in Jira" in capsys.readouterr().out
+
+
+def test_secrets_present_and_ticket_missing_hard_fails(monkeypatch, capsys):
+    _with_secrets(monkeypatch)
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/KEEL-9999-ghost")
+    monkeypatch.setattr(J, "issue_status", lambda key: 404)
+    assert main() == 1                                   # the hard line
+    assert "::error::" in capsys.readouterr().err
+
+
+def test_inconclusive_jira_error_does_not_block(monkeypatch, capsys):
+    _with_secrets(monkeypatch)
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/KEEL-78-x")
+    monkeypatch.setattr(J, "issue_status", lambda key: 500)
+    assert main() == 0                                   # don't block a merge on a Jira hiccup
+    assert "::warning::" in capsys.readouterr().out
+
+
+def test_maint_branch_skips_existence_check(monkeypatch):
+    _with_secrets(monkeypatch)                           # even with secrets, the lane is exempt
+    monkeypatch.setenv("EMKEEL_BRANCH", "emkeel-maint/0.1.70-abc")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    called = {"n": 0}
+    monkeypatch.setattr(J, "issue_status", lambda key: called.update(n=called["n"] + 1) or 404)
+    assert main() == 0 and called["n"] == 0             # never queried Jira

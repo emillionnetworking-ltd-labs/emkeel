@@ -1,8 +1,14 @@
-"""Gate: the change must reference a ticket (e.g., KEEL-12).
+"""Gate: the change must reference a ticket that EXISTS (e.g., KEEL-12).
 
-Deterministic, runs in CI. Fails (exit 1) if no ticket key is found in the branch name
-or the PR title. It is the first link of ticket->code traceability. "done" = this check
-passes, not a self-attested flag.
+Deterministic on the syntax (a ticket key in the branch/PR title) and — when the Jira secrets are
+present — on EXISTENCE too: it GETs the issue and FAILS if Jira returns 404. This closes the gap where
+a plausible-but-nonexistent key (a typo, or a ticket never created) sailed through. First link of
+ticket->code traceability. "done" = this check passes, not a self-attested flag.
+
+Degradation: secrets absent → existence is NOT verified (non-blocking ::warning::, syntax-only, as
+before — keeps the gate usable offline / on forks without secrets). Secrets present + 404 → HARD FAIL.
+A non-404 error (auth/5xx) is inconclusive → non-blocking ::warning:: (don't block a merge on a Jira
+hiccup). The `emkeel-maint/*` lane stays exempt (no ticket required there).
 """
 
 from __future__ import annotations
@@ -55,6 +61,31 @@ def _warn_if_project_mismatch(key: str) -> None:
         pass  # a nudge must never break the gate
 
 
+def _verify_exists(key: str, repo: str) -> int:
+    """0 if the merge may proceed, 1 on a hard fail. Verifies the ticket EXISTS in Jira when secrets
+    allow it; degrades to a non-blocking warning otherwise (see module docstring)."""
+    from emkeel.jira import issue_status, secrets_present
+    if not secrets_present():
+        print(f"::warning::Ticket existence NOT verified for '{key}' — Jira secrets not set "
+              f"(add JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN at "
+              f"https://github.com/{repo}/settings/secrets/actions/new).")
+        print(f"OK (syntax only): ticket '{key}' linked — existence unverified.")
+        return 0
+    status = issue_status(key)
+    if status == 200:
+        print(f"OK: ticket '{key}' exists in Jira.")
+        return 0
+    if status == 404:
+        proj = key.split("-")[0]
+        print(f"::error::Ticket '{key}' does not exist in Jira (HTTP 404). Create it first, e.g. "
+              f"`emkeel jira create --project {proj} --summary \"...\"`, then re-run.", file=sys.stderr)
+        print(f"FAIL: ticket '{key}' not found in Jira.", file=sys.stderr)
+        return 1
+    print(f"::warning::Could not verify '{key}' in Jira (HTTP {status}) — not blocking the merge.")
+    print(f"OK (inconclusive): ticket '{key}' linked — existence check returned HTTP {status}.")
+    return 0
+
+
 def main() -> int:
     _warn_if_stale_wiring()
     branch = os.environ.get("EMKEEL_BRANCH", "")
@@ -66,15 +97,15 @@ def main() -> int:
     pr_title = os.environ.get("EMKEEL_PR_TITLE", "")
     key = find_ticket_key(branch, pr_title)
     _warn_if_project_mismatch(key)
-    if key:
-        print(f"OK: ticket '{key}' linked (branch='{branch}' pr_title='{pr_title}').")
-        return 0
-    print(
-        "FAIL: no ticket key found (e.g. KEEL-12) in the branch or PR title. "
-        f"branch='{branch}' pr_title='{pr_title}'",
-        file=sys.stderr,
-    )
-    return 1
+    if not key:
+        print(
+            "FAIL: no ticket key found (e.g. KEEL-12) in the branch or PR title. "
+            f"branch='{branch}' pr_title='{pr_title}'",
+            file=sys.stderr,
+        )
+        return 1
+    repo = os.environ.get("GITHUB_REPOSITORY", "OWNER/REPO")
+    return _verify_exists(key, repo)
 
 
 if __name__ == "__main__":

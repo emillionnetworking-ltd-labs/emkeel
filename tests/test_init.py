@@ -82,6 +82,21 @@ def test_emkeel_source_flows_into_ci_and_toml(tmp_path):
     assert f'source = "{src}"' in toml
 
 
+def test_ci_ticket_link_gets_jira_secrets(tmp_path):
+    # KEEL-83: the ticket-link gate is wired to the Jira secrets so it can verify existence.
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    block = ci.split("check_ticket_link")[0]
+    assert "JIRA_BASE_URL" in block and "JIRA_TOKEN" in block
+
+
+def test_jira_transition_has_no_blind_continue_on_error(tmp_path):
+    # KEEL-83: real transition failures must surface, not be swallowed.
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    jira = (tmp_path / ".github/workflows/jira-transition.yml").read_text()
+    assert "continue-on-error: true" not in jira      # the blind directive is gone (a comment may mention it)
+
+
 def test_default_source_is_pypi_version_pinned(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()

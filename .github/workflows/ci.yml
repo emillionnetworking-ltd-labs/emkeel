@@ -26,6 +26,10 @@ jobs:
         env:
           EMKEEL_BRANCH: ${{ github.head_ref }}
           EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+          # Secrets let the gate verify the ticket EXISTS in Jira (404 → hard fail). Absent → syntax-only warning.
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: python -m emkeel.gates.check_ticket_link
 
       # Gate: la via de mantenimiento emkeel-maint/ solo puede tocar ficheros de Emkeel.
