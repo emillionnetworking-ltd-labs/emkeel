@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 
 from emkeel.gates.check_ticket_link import find_ticket_key
+from emkeel.lanes import is_maint_lane
 
 
 def secrets_present() -> bool:
@@ -164,9 +165,13 @@ def _main_transition(argv: list[str]) -> int:
     ap.add_argument("key", nargs="?", default=None, help="ticket key (default: from EMKEEL_BRANCH/PR_TITLE)")
     ap.add_argument("--status", default="Done")
     ns = ap.parse_args(argv)
-    key = ns.key or find_ticket_key(
-        os.environ.get("EMKEEL_BRANCH", ""), os.environ.get("EMKEEL_PR_TITLE", "")
-    )
+    branch = os.environ.get("EMKEEL_BRANCH", "")
+    if is_maint_lane(branch):
+        # The scope-gated maintenance lane carries no Jira ticket (check_ticket_link exempts it too) —
+        # there's nothing to transition, so SKIP instead of failing on "no ticket key".
+        print("OK: emkeel maintenance lane — no ticket to transition.")
+        return 0
+    key = ns.key or find_ticket_key(branch, os.environ.get("EMKEEL_PR_TITLE", ""))
     if not key:
         print("no ticket key (set EMKEEL_BRANCH/EMKEEL_PR_TITLE or pass KEY)", file=sys.stderr)
         return 1

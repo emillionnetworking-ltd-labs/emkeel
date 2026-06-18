@@ -127,6 +127,16 @@ def test_main_fails_without_key(monkeypatch):
     assert J.main([]) == 1
 
 
+def test_main_skips_on_maint_lane(monkeypatch, capsys):
+    # THE BUG: emkeel update/set merge on emkeel-maint/* — no ticket to transition → SKIP (exit 0),
+    # not a false-red exit 1. (Must not even reach transition_issue.)
+    monkeypatch.setattr(J, "transition_issue", lambda *a, **k: (_ for _ in ()).throw(AssertionError("called")))
+    monkeypatch.setenv("EMKEEL_BRANCH", "emkeel-maint/0.1.69-abc123")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    assert J.main([]) == 0
+    assert "maintenance lane" in capsys.readouterr().out.lower()
+
+
 def test_secrets_present(monkeypatch):
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.delenv(k, raising=False)

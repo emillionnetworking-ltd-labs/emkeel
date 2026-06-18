@@ -17,6 +17,8 @@ import os
 import re
 import sys
 
+from emkeel.lanes import is_maint_lane
+
 # Jira-style ticket key: 2+ uppercase letters, a hyphen, a number. e.g. KEEL-12, PROD-345.
 KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
 
@@ -89,7 +91,7 @@ def _verify_exists(key: str, repo: str) -> int:
 def main() -> int:
     _warn_if_stale_wiring()
     branch = os.environ.get("EMKEEL_BRANCH", "")
-    if branch.startswith("emkeel-maint/"):
+    if is_maint_lane(branch):
         # Tool maintenance lane: no Jira ticket required — check_maint_scope guarantees the PR
         # touches only emkeel-managed files, so it can't smuggle code past traceability.
         print("OK: emkeel maintenance branch — no ticket required (scope-gated by check_maint_scope).")
