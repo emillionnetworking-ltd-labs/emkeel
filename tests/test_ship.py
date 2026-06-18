@@ -68,6 +68,64 @@ def test_ship_update_isolates_working_tree(tmp_path):
     assert "gh pr create" in j and "gh pr merge" in j
 
 
+# ── in-flight maint PR detection (KEEL-84) ─────────────────────────────────────
+
+from emkeel.ship import inflight_maint_pr
+
+
+def _gh(returncode=0, stdout=""):
+    return lambda args, **k: SimpleNamespace(returncode=returncode, stdout=stdout, stderr="")
+
+
+def test_inflight_maint_pr_found():
+    out = '[{"number": 7, "headRefName": "emkeel-maint/0.1.69-abc"}]'
+    assert inflight_maint_pr("o/r", run=_gh(0, out)) == 7
+
+
+def test_inflight_maint_pr_ignores_non_maint_prs():
+    out = '[{"number": 5, "headRefName": "feat/KEEL-1-x"}, {"number": 6, "headRefName": "fix/KEEL-2-y"}]'
+    assert inflight_maint_pr("o/r", run=_gh(0, out)) is None
+
+
+def test_inflight_maint_pr_degrades_when_gh_fails():
+    assert inflight_maint_pr("o/r", run=_gh(returncode=1, stdout="boom")) is None    # gh down → None
+
+
+def test_inflight_maint_pr_degrades_on_bad_json():
+    assert inflight_maint_pr("o/r", run=_gh(0, "not json")) is None
+
+
+def test_inflight_maint_pr_no_repo():
+    assert inflight_maint_pr("", run=_gh(0, "[]")) is None
+
+
+def test_ship_update_skips_when_pr_in_flight(tmp_path, capsys):
+    origin, work = _seed_repo(tmp_path)
+    (work / "AGENTS.md").write_text("# stale\n")
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    _git(["remote", "add", "origin", str(origin)], work)
+    _git(["push", "-q", "-u", "origin", "main"], work)
+
+    calls = []
+
+    def run(args, stdin=None, timeout=None, capture=True):
+        calls.append(" ".join(str(a) for a in args))
+        if args and args[0] == "gh":
+            j = " ".join(args)
+            if "auth status" in j:
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if "pr list" in j:    # a refresh is already in flight
+                return SimpleNamespace(returncode=0,
+                                       stdout='[{"number": 42, "headRefName": "emkeel-maint/0.1.69-xy"}]', stderr="")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return subprocess.run(args, capture_output=True, text=True)
+
+    assert ship_update(target=work, run=run) == 0
+    out = capsys.readouterr().out
+    assert "Already shipped as PR #42" in out and "git pull" in out
+    assert not any("pr create" in c for c in calls)        # did NOT re-push / re-open a PR
+
+
 def test_ship_update_nothing_when_current(tmp_path):
     origin, work = _seed_repo(tmp_path)                       # apply == current templates
     _git(["add", "-A"], work)
