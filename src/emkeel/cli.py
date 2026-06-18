@@ -11,6 +11,7 @@ Subcommands:
   emkeel update          refresh the wiring AND ship it (maintenance lane → PR → auto-merge); --no-ship to leave pending
   emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo) and ship it; --no-ship too
   emkeel strategy …      scaffold (new <topic>) + lint (check) researched strategy artifacts
+  emkeel jira create …   create a Jira issue (--project --summary [--type Task] [--status]); the convenience behind the hard gate
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 import sys
 
-_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|jira|version> [args]   (try: emkeel setup)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,6 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "strategy":
         from emkeel.strategy import main as strategy_main
         return strategy_main(rest)
+    if cmd == "jira":
+        from emkeel.jira import main as jira_main
+        return jira_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)

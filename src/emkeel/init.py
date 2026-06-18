@@ -157,6 +157,10 @@ jobs:
         env:
           EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
           EMKEEL_PR_TITLE: ${{{{ github.event.pull_request.title }}}}
+          # Secrets let the gate verify the ticket EXISTS in Jira (404 -> hard fail). Absent -> syntax-only warning.
+          JIRA_BASE_URL: ${{{{ secrets.JIRA_BASE_URL }}}}
+          JIRA_EMAIL: ${{{{ secrets.JIRA_EMAIL }}}}
+          JIRA_TOKEN: ${{{{ secrets.JIRA_TOKEN }}}}
         run: python -m emkeel.gates.check_ticket_link
       - name: "Gate - maintenance scope (emkeel-maint lane only)"
         if: github.event_name == 'pull_request'
@@ -215,7 +219,8 @@ jobs:
       - name: Install emkeel
         run: pip install "{source}"
       - name: Transition linked ticket to Done
-        continue-on-error: true
+        # No blind continue-on-error: benign cases (already Done, secrets missing) succeed in code;
+        # a REAL failure (404 / POST failed / status didn't land on Done) surfaces red via ::error::.
         env:
           JIRA_BASE_URL: ${{{{ secrets.JIRA_BASE_URL }}}}
           JIRA_EMAIL: ${{{{ secrets.JIRA_EMAIL }}}}
