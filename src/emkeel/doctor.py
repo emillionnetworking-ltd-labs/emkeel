@@ -42,7 +42,7 @@ def gather(target: Path) -> dict:
     st = {"governed": (target / "emkeel.toml").is_file(), "repo": "", "connected": False,
           "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main",
           "drift": [], "jira_project": "", "branch_key": "", "required_checks": ["gates"],
-          "required_missing": []}
+          "required_missing": [], "maint_pr": None}
     if st["governed"]:
         from emkeel.update import load_cfg, origin_jira_project, wiring_drift
         st["drift"] = wiring_drift(target)   # generated files that `emkeel update` would refresh
@@ -69,6 +69,9 @@ def gather(target: Path) -> dict:
     sl = _run(["gh", "secret", "list", "--repo", st["repo"]])
     if sl.returncode == 0:
         st["secrets_ok"] = all(k in sl.stdout for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"))
+    if st["drift"]:                       # a refresh may already be shipped + waiting on auto-merge
+        from emkeel.ship import inflight_maint_pr
+        st["maint_pr"] = inflight_maint_pr(st["repo"], _run)
     enforced = _required_contexts(st["repo"], st["default_branch"])
     if enforced is None:                 # branch protection couldn't be read — leave as '?', don't fail
         st["protection_ok"] = None
@@ -90,8 +93,13 @@ def report_lines(st: dict) -> list[str]:
     out.append(f"  {ok(st.get('governed'))} repo governed (emkeel.toml)"
                + ("" if st.get("governed") else "   → run: emkeel setup"))
     if st.get("governed") and st.get("drift"):
-        out.append(f"  ⚠ {len(st['drift'])} wiring file(s) out of date ({', '.join(st['drift'])})"
-                   "   → run: emkeel update")
+        pr = st.get("maint_pr")
+        if pr:
+            out.append(f"  ⚠ {len(st['drift'])} wiring file(s) out of date — refresh in flight (PR #{pr}); "
+                       "will be clean after it merges + `git pull`.")
+        else:
+            out.append(f"  ⚠ {len(st['drift'])} wiring file(s) out of date ({', '.join(st['drift'])})"
+                       "   → run: emkeel update")
     jp, bk = st.get("jira_project"), st.get("branch_key")
     if jp and bk and bk.split("-")[0] != jp:
         out.append(f"  ⚠ branch '{bk}' ≠ configured Jira project '{jp}'"

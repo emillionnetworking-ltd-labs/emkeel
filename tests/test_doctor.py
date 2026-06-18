@@ -176,6 +176,42 @@ def test_gather_declared_check_missing(tmp_path, monkeypatch):
     assert _has(report_lines(st), "declared but NOT enforced")
 
 
+def test_gather_detects_inflight_pr_when_drifting(tmp_path, monkeypatch):
+    _governed_repo(tmp_path, ["gates"])
+    monkeypatch.setattr("emkeel.update.wiring_drift", lambda target: ["AGENTS.md"])   # force drift
+
+    def run(args):
+        j = " ".join(args)
+        if "remote get-url origin" in j:
+            return SimpleNamespace(returncode=0, stdout="git@github.com:a/b.git\n")
+        if "auth status" in j:
+            return SimpleNamespace(returncode=0, stdout="ok")
+        if "pr list" in j:
+            return SimpleNamespace(returncode=0, stdout='[{"number": 99, "headRefName": "emkeel-maint/0.1.69-z"}]')
+        return SimpleNamespace(returncode=1, stdout="")        # everything else (incl. protection) errors
+    monkeypatch.setattr(doctor, "_run", run)
+    st = doctor.gather(tmp_path)
+    assert st["maint_pr"] == 99
+    assert _has(report_lines(st), "refresh in flight (PR #99)")
+
+
+def test_gather_inflight_degrades_when_gh_pr_list_fails(tmp_path, monkeypatch):
+    _governed_repo(tmp_path, ["gates"])
+    monkeypatch.setattr("emkeel.update.wiring_drift", lambda target: ["AGENTS.md"])
+
+    def run(args):
+        j = " ".join(args)
+        if "remote get-url origin" in j:
+            return SimpleNamespace(returncode=0, stdout="git@github.com:a/b.git\n")
+        if "auth status" in j:
+            return SimpleNamespace(returncode=0, stdout="ok")
+        return SimpleNamespace(returncode=1, stdout="")        # gh pr list fails too → degrade
+    monkeypatch.setattr(doctor, "_run", run)
+    st = doctor.gather(tmp_path)
+    assert st["maint_pr"] is None
+    assert _has(report_lines(st), "run: emkeel update")        # falls back to the normal nudge
+
+
 def test_gather_not_connected_returns_early(tmp_path):
     # governed repo with no git remote → connected False, no gh calls attempted.
     _governed_repo(tmp_path, ["gates"])
@@ -224,6 +260,20 @@ def test_current_wiring_no_nudge():
     r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
                       "secrets_ok": True, "protection_ok": True, "drift": []})
     assert not _has(r, "emkeel update")
+
+
+def test_drift_with_inflight_pr_points_to_pr_not_rerun(monkeypatch):
+    # KEEL-84: a refresh already in flight → don't nag 'run: emkeel update'.
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True, "drift": ["AGENTS.md"], "maint_pr": 42})
+    assert _has(r, "refresh in flight (PR #42)") and _has(r, "git pull")
+    assert not _has(r, "→ run: emkeel update")
+
+
+def test_drift_without_inflight_pr_says_run_update():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True, "drift": ["AGENTS.md"], "maint_pr": None})
+    assert _has(r, "out of date") and _has(r, "run: emkeel update")
 
 
 def test_project_mismatch_warns():

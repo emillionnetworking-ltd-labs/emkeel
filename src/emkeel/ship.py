@@ -11,6 +11,7 @@ proves the PR touches nothing but emkeel-managed files — a bounded, self-polic
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -19,6 +20,27 @@ from emkeel import connect
 from emkeel.update import load_cfg
 
 MAINT_PREFIX = "emkeel-maint/"
+
+
+def inflight_maint_pr(repo: str, run=connect._run) -> int | None:
+    """Number of an OPEN PR whose head is an `emkeel-maint/*` lane (a refresh already in flight), or None.
+
+    Pure + injectable (gh boundary passed in) so it's testable without network. Degrades to None when gh
+    is unavailable or errors — callers then fall back to normal behavior (ship / 'run: emkeel update')."""
+    if not repo:
+        return None
+    r = run(["gh", "pr", "list", "-R", repo, "--state", "open",
+             "--json", "number,headRefName", "--limit", "50"])
+    if r.returncode != 0 or not (r.stdout or "").strip():
+        return None
+    try:
+        prs = json.loads(r.stdout)
+    except (ValueError, TypeError):
+        return None
+    for pr in prs:
+        if str(pr.get("headRefName", "")).startswith(MAINT_PREFIX):
+            return pr.get("number")
+    return None
 
 
 def _default_branch(run, target: Path, repo: str) -> str:
@@ -42,6 +64,13 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
         print("  No emkeel.toml here — run `emkeel setup` first.")
         return 1
     repo = cfg.github_repo
+    # If a refresh is already shipped and waiting on auto-merge, don't re-push (that's the
+    # non-fast-forward error) — point the user at the open PR and exit clean.
+    existing = inflight_maint_pr(repo, run)
+    if existing is not None:
+        print(f"  Already shipped as PR #{existing}, pending auto-merge — nothing re-pushed. "
+              f"Run `git pull` once it lands.")
+        return 0
     default = _default_branch(run, target, repo)
     if run(["git", "-C", str(target), "fetch", "-q", "origin", default]).returncode != 0:
         print(f"  could not fetch origin/{default} — is the repo pushed to GitHub?")
@@ -77,11 +106,15 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
         if pr.returncode != 0:
             print(f"  PR create: {(pr.stderr or pr.stdout).strip()}")
             return 1
-        print(f"  PR opened: {(pr.stdout or '').strip()}")
+        pr_url = (pr.stdout or "").strip()
+        print(f"  PR opened: {pr_url}")
         connect.allow_auto_merge(repo, run)
         m = run(["gh", "pr", "merge", branch, "-R", repo, "--auto", "--squash"])
         print("  ✓ auto-merge enabled — it lands when the gates pass."
               if m.returncode == 0 else f"  auto-merge: {(m.stderr or m.stdout).strip()}")
+        ref = f"PR #{pr_url.rstrip('/').rsplit('/', 1)[-1]}" if pr_url else "the PR"
+        print(f"  Note: this applies asynchronously — {ref} merges once CI passes (~min). Until then "
+              f"`emkeel doctor` will still show drift here; run `git pull` after it merges.")
         return 0
     finally:
         run(["git", "-C", str(target), "worktree", "remove", "--force", wt])
