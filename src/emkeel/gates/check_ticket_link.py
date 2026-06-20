@@ -17,7 +17,7 @@ import os
 import re
 import sys
 
-from emkeel.lanes import is_maint_lane
+from emkeel.lanes import is_dependabot_lane, is_maint_lane
 
 # Jira-style ticket key: 2+ uppercase letters, a hyphen, a number. e.g. KEEL-12, PROD-345.
 KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
@@ -95,6 +95,11 @@ def main() -> int:
         # Tool maintenance lane: no Jira ticket required — check_maint_scope guarantees the PR
         # touches only emkeel-managed files, so it can't smuggle code past traceability.
         print("OK: emkeel maintenance branch — no ticket required (scope-gated by check_maint_scope).")
+        return 0
+    if is_dependabot_lane(branch):
+        # Dependabot lane: bot-created, no Jira ticket — check_dependabot_scope guarantees the PR
+        # touches only dependency manifests/lockfiles + Actions bumps, so it can't smuggle code either.
+        print("OK: dependabot branch — no ticket required (scope-gated by check_dependabot_scope).")
         return 0
     pr_title = os.environ.get("EMKEEL_PR_TITLE", "")
     key = find_ticket_key(branch, pr_title)

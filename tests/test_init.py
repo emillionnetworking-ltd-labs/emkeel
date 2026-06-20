@@ -146,6 +146,12 @@ def test_ci_includes_maint_scope_gate(tmp_path):
     assert "check_maint_scope" in ci and "fetch-depth: 0" in ci
 
 
+def test_ci_includes_dependabot_scope_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    assert "check_dependabot_scope" in ci
+
+
 def test_scaffolds_strategy_skill(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     skill = tmp_path / ".claude/skills/strategy/SKILL.md"

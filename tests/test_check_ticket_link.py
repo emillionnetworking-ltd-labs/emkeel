@@ -66,6 +66,16 @@ def test_ticket_link_accepts_maint_branch(monkeypatch, capsys):
     assert "maintenance" in capsys.readouterr().out.lower()
 
 
+def test_ticket_link_accepts_dependabot_branch(monkeypatch, capsys):
+    # dependabot/* is bot-created → no ticket; scope-gated by check_dependabot_scope.
+    from emkeel.gates.check_ticket_link import main
+    monkeypatch.setenv("EMKEEL_BRANCH", "dependabot/npm_and_yarn/lodash-4.17.21")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    assert main() == 0
+    out = capsys.readouterr().out.lower()
+    assert "dependabot" in out and "check_dependabot_scope" in out
+
+
 # ── existence verification (KEEL-83): gate now checks the ticket EXISTS in Jira ─────────
 
 import emkeel.jira as J

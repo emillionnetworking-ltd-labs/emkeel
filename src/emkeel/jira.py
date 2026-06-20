@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 
 from emkeel.gates.check_ticket_link import find_ticket_key
-from emkeel.lanes import is_maint_lane
+from emkeel.lanes import is_dependabot_lane, is_maint_lane
 
 
 def secrets_present() -> bool:
@@ -170,6 +170,10 @@ def _main_transition(argv: list[str]) -> int:
         # The scope-gated maintenance lane carries no Jira ticket (check_ticket_link exempts it too) —
         # there's nothing to transition, so SKIP instead of failing on "no ticket key".
         print("OK: emkeel maintenance lane — no ticket to transition.")
+        return 0
+    if is_dependabot_lane(branch):
+        # Same for the Dependabot lane — bot PRs carry no ticket, so there's nothing to transition.
+        print("OK: dependabot lane — no ticket to transition.")
         return 0
     key = ns.key or find_ticket_key(branch, os.environ.get("EMKEEL_PR_TITLE", ""))
     if not key:
