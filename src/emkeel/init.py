@@ -168,6 +168,12 @@ jobs:
           EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
           EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
         run: python -m emkeel.gates.check_maint_scope
+      - name: "Gate - dependabot scope (dependabot lane only)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+          EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
+        run: python -m emkeel.gates.check_dependabot_scope
       - name: "Gate - plan present (features)"
         if: github.event_name == 'pull_request'
         env:

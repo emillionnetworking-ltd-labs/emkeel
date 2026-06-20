@@ -137,6 +137,15 @@ def test_main_skips_on_maint_lane(monkeypatch, capsys):
     assert "maintenance lane" in capsys.readouterr().out.lower()
 
 
+def test_main_skips_on_dependabot_lane(monkeypatch, capsys):
+    # Same false-red avoidance for the bot lane: no ticket → SKIP exit 0, never reaching transition_issue.
+    monkeypatch.setattr(J, "transition_issue", lambda *a, **k: (_ for _ in ()).throw(AssertionError("called")))
+    monkeypatch.setenv("EMKEEL_BRANCH", "dependabot/pip/urllib3-2.2.2")
+    monkeypatch.delenv("EMKEEL_PR_TITLE", raising=False)
+    assert J.main([]) == 0
+    assert "dependabot lane" in capsys.readouterr().out.lower()
+
+
 def test_secrets_present(monkeypatch):
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.delenv(k, raising=False)

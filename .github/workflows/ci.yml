@@ -40,6 +40,14 @@ jobs:
           EMKEEL_BASE_REF: ${{ github.base_ref }}
         run: python -m emkeel.gates.check_maint_scope
 
+      # Gate: el carril dependabot/ (sin ticket) solo puede tocar ficheros de dependencias.
+      - name: "Gate — dependabot scope"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_dependabot_scope
+
       # Gate: un PR feature (rama feat/) debe traer su spec en emkeel-governance/specs/.
       - name: "Gate — plan present (features)"
         if: github.event_name == 'pull_request'
