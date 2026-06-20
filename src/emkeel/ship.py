@@ -85,11 +85,17 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
             print(f"  worktree add failed: {(r.stderr or r.stdout).strip()}")
             return 1
         mutate(Path(wt))                                  # caller writes the emkeel changes here
-        # A pure version-stamp bump of emkeel.toml is noise — drop it so we don't open an empty PR.
+        # A version-stamp bump of emkeel.toml is noise ONLY when it's the SOLE change — drop it then so
+        # we don't open an empty PR. But when the wiring genuinely refreshed (workflows/other files
+        # changed too), KEEP the bump so `generated_with` advances WITH the refresh instead of going
+        # stale — reverting it there would ship refreshed wiring stamped at the old version.
         toml = Path(wt) / "emkeel.toml"
         if toml.is_file():
             head = run(["git", "-C", wt, "show", "HEAD:emkeel.toml"]).stdout
-            if _strip_stamp(toml.read_text(encoding="utf-8")) == _strip_stamp(head):
+            stamp_only = _strip_stamp(toml.read_text(encoding="utf-8")) == _strip_stamp(head)
+            dirty = [ln[3:].strip() for ln in
+                     run(["git", "-C", wt, "status", "--porcelain"]).stdout.splitlines() if ln.strip()]
+            if stamp_only and dirty == ["emkeel.toml"]:   # nothing but the stamp moved → pure noise
                 run(["git", "-C", wt, "checkout", "-q", "--", "emkeel.toml"])
         if not run(["git", "-C", wt, "status", "--porcelain"]).stdout.strip():
             print(f"  origin/{default} is already current — nothing to ship.")

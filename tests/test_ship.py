@@ -228,3 +228,51 @@ def test_ship_update_skips_stamp_only_change(tmp_path):
     calls = []
     assert ship_update(target=work, run=_real_git_fake_gh(calls)) == 0
     assert "gh pr create" not in "\n".join(calls)   # only the stamp differs → no empty PR
+
+
+def _shipped_file(work, ref_file: str) -> str:
+    """Content of `ref_file` on the maint branch that ship_* pushed to origin."""
+    refs = subprocess.run(["git", "-C", str(work), "ls-remote", "origin"],
+                          capture_output=True, text=True).stdout
+    maint = [ln.split("refs/heads/")[1] for ln in refs.splitlines() if "emkeel-maint/" in ln][0]
+    subprocess.run(["git", "-C", str(work), "fetch", "-q", "origin", maint], check=True)
+    return subprocess.run(["git", "-C", str(work), "show", f"FETCH_HEAD:{ref_file}"],
+                          capture_output=True, text=True).stdout
+
+
+def test_ship_update_advances_stamp_on_real_refresh(tmp_path):
+    """(a) When the wiring genuinely refreshes (other files change too), the version stamp must NOT be
+    reverted — `generated_with` advances to __version__ instead of staying stale at the old value."""
+    import re
+    from emkeel import __version__
+    origin, work = _seed_repo(tmp_path)
+    # origin/main is BOTH stale wiring (old AGENTS.md) AND an old stamp — a real refresh is due.
+    (work / "AGENTS.md").write_text("# stale contract\n")
+    toml = (work / "emkeel.toml").read_text()
+    (work / "emkeel.toml").write_text(re.sub(r'generated_with = "[^"]*"', 'generated_with = "0.0.1"', toml))
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    _git(["remote", "add", "origin", str(origin)], work); _git(["push", "-q", "-u", "origin", "main"], work)
+
+    calls = []
+    assert ship_update(target=work, run=_real_git_fake_gh(calls)) == 0
+    assert "gh pr create" in "\n".join(calls)                      # a real refresh shipped a PR
+
+    shipped = _shipped_file(work, "emkeel.toml")
+    assert f'generated_with = "{__version__}"' in shipped         # stamp advanced with the refresh…
+    assert 'generated_with = "0.0.1"' not in shipped              # …not left stale
+    files = subprocess.run(["git", "-C", str(work), "show", "--name-only", "--format=", "FETCH_HEAD"],
+                           capture_output=True, text=True).stdout
+    assert "AGENTS.md" in files and "emkeel.toml" in files        # PR carries BOTH wiring and stamp
+
+
+def test_ship_set_ships_non_stamp_field(tmp_path):
+    """(c) A real emkeel.toml field edit (not the stamp) is shipped untouched by the noise-revert."""
+    from emkeel.ship import ship_set
+    origin, work = _seed_repo(tmp_path)
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    _git(["remote", "add", "origin", str(origin)], work); _git(["push", "-q", "-u", "origin", "main"], work)
+
+    calls = []
+    assert ship_set("jira_project", "ECO", target=work, run=_real_git_fake_gh(calls)) == 0
+    assert "gh pr create" in "\n".join(calls)                      # a real field change ships
+    assert 'project_key = "ECO"' in _shipped_file(work, "emkeel.toml")   # the edit landed, not reverted
