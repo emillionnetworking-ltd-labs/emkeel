@@ -42,6 +42,60 @@ def inflight_maint_pr(repo: str, run=connect._run) -> int | None:
     return None
 
 
+# A check is "bad" (the PR is stuck on it) when its conclusion/state is one of these.
+_BAD_CHECK = {"FAILURE", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "ERROR"}
+
+
+def maint_pr_status(repo: str, number: int, run=connect._run) -> dict:
+    """Health of an in-flight maint PR: {"health": ..., "branch": ...}.
+
+    health ∈ {"failing","behind","healthy","unknown"}. Injectable gh boundary; degrades to "unknown"
+    (→ callers just wait, never act blindly) when gh can't tell us."""
+    r = run(["gh", "pr", "view", str(number), "-R", repo,
+             "--json", "headRefName,mergeStateStatus,statusCheckRollup"])
+    if r.returncode != 0 or not (r.stdout or "").strip():
+        return {"health": "unknown", "branch": ""}
+    try:
+        d = json.loads(r.stdout)
+    except (ValueError, TypeError):
+        return {"health": "unknown", "branch": ""}
+    branch = d.get("headRefName", "")
+    rollup = d.get("statusCheckRollup") or []
+
+    def state(c: dict) -> str:
+        return str(c.get("conclusion") or c.get("state") or "").upper()
+
+    if any(state(c) in _BAD_CHECK for c in rollup):
+        return {"health": "failing", "branch": branch}
+    if str(d.get("mergeStateStatus", "")).upper() == "BEHIND":
+        return {"health": "behind", "branch": branch}
+    return {"health": "healthy", "branch": branch}
+
+
+def recover_maint_pr(repo: str, number: int, branch: str, health: str, run=connect._run) -> tuple[str, str]:
+    """Unstick a maint PR from the CLI. Returns (mode, message):
+      - "wait":     recovered in place (re-ran failed CI) — caller keeps waiting for it to merge.
+      - "recreate": closed the dead PR — caller should ship a fresh one on current main.
+    """
+    if health == "behind":
+        run(["gh", "pr", "close", str(number), "-R", repo, "--delete-branch"])
+        return "recreate", (f"  PR #{number} was behind the base — closed it; re-shipping fresh on "
+                            "current main (it'll merge when the gates pass).")
+    # "failing": re-trigger the failed jobs of its latest failed run.
+    rl = run(["gh", "run", "list", "-R", repo, "--branch", branch, "--status", "failure",
+              "--limit", "1", "--json", "databaseId", "--jq", ".[0].databaseId"])
+    rid = (rl.stdout or "").strip()
+    if not rid:
+        return "wait", (f"  PR #{number} stuck (CI failed) but no failed run was found to rerun — "
+                        "check it manually.")
+    rr = run(["gh", "run", "rerun", rid, "-R", repo, "--failed"])
+    if rr.returncode == 0:
+        return "wait", (f"  PR #{number} stuck (CI failed) — re-ran its failed checks (run {rid}); "
+                        "it'll merge when green.")
+    return "wait", (f"  PR #{number} stuck (CI failed) — couldn't rerun ({(rr.stderr or rr.stdout).strip()}); "
+                    "check it manually.")
+
+
 def _default_branch(run, target: Path, repo: str) -> str:
     if repo:
         r = run(["gh", "api", f"repos/{repo}", "--jq", ".default_branch"])
@@ -63,13 +117,22 @@ def _ship_via_worktree(mutate, summary: str, target: Path, run) -> int:
         print("  No emkeel.toml here — run `emkeel setup` first.")
         return 1
     repo = cfg.github_repo
-    # If a refresh is already shipped and waiting on auto-merge, don't re-push (that's the
-    # non-fast-forward error) — point the user at the open PR and exit clean.
+    # A refresh may already be shipped and waiting on auto-merge. If it's HEALTHY, don't re-push (that's
+    # the non-fast-forward error) — point the user at the open PR. But if it's STUCK (its CI failed, or it's
+    # behind the base), recover it from the CLI instead of dead-ending — otherwise the operator can't
+    # unstick it from the console at all.
     existing = inflight_maint_pr(repo, run)
     if existing is not None:
-        print(f"  Already shipped as PR #{existing}, pending auto-merge — nothing re-pushed. "
-              f"Run `git pull` once it lands.")
-        return 0
+        status = maint_pr_status(repo, existing, run)
+        if status["health"] in ("healthy", "unknown"):     # unknown → offline-safe: behave as before (wait)
+            print(f"  Already shipped as PR #{existing}, pending auto-merge — nothing re-pushed. "
+                  f"Run `git pull` once it lands.")
+            return 0
+        mode, msg = recover_maint_pr(repo, existing, status["branch"], status["health"], run)
+        print(msg)
+        if mode == "wait":
+            return 0
+        # mode == "recreate": the dead PR was closed — fall through and ship a fresh one.
     default = _default_branch(run, target, repo)
     if run(["git", "-C", str(target), "fetch", "-q", "origin", default]).returncode != 0:
         print(f"  could not fetch origin/{default} — is the repo pushed to GitHub?")

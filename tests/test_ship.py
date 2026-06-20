@@ -126,6 +126,172 @@ def test_ship_update_skips_when_pr_in_flight(tmp_path, capsys):
     assert not any("pr create" in c for c in calls)        # did NOT re-push / re-open a PR
 
 
+def _seeded_with_remote(tmp_path):
+    origin, work = _seed_repo(tmp_path)
+    (work / "AGENTS.md").write_text("# stale\n")
+    _git(["add", "-A"], work); _git(["commit", "-qm", "init"], work)
+    _git(["remote", "add", "origin", str(origin)], work)
+    _git(["push", "-q", "-u", "origin", "main"], work)
+    return origin, work
+
+
+def _inflight_run(calls, *, rollup, merge_state="CLEAN", rerun_rc=0):
+    """Fake gh: a maint PR #42 is in flight; `gh pr view` reports `rollup` + `merge_state`."""
+    import json as _json
+
+    def run(args, stdin=None, timeout=None, capture=True):
+        calls.append(" ".join(str(a) for a in args))
+        if args and args[0] == "gh":
+            j = " ".join(args)
+            if "auth status" in j:
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if "pr list" in j:
+                return SimpleNamespace(returncode=0,
+                                       stdout='[{"number": 42, "headRefName": "emkeel-maint/0.1.73-xy"}]', stderr="")
+            if "pr view" in j:
+                return SimpleNamespace(returncode=0, stdout=_json.dumps(
+                    {"headRefName": "emkeel-maint/0.1.73-xy", "mergeStateStatus": merge_state,
+                     "statusCheckRollup": rollup}), stderr="")
+            if "run list" in j:
+                return SimpleNamespace(returncode=0, stdout="999", stderr="")
+            if "run rerun" in j:
+                return SimpleNamespace(returncode=rerun_rc, stdout="", stderr="" if rerun_rc == 0 else "boom")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return subprocess.run(args, capture_output=True, text=True)
+    return run
+
+
+def test_ship_update_recovers_stuck_pr_by_rerunning_ci(tmp_path, capsys):
+    """THE BUG: a maint PR in flight whose CI FAILED must be recovered from the CLI (re-run its failed
+    checks), not dead-ended with 'Already shipped … nothing re-pushed'."""
+    origin, work = _seeded_with_remote(tmp_path)
+    calls = []
+    run = _inflight_run(calls, rollup=[{"name": "gates", "status": "COMPLETED", "conclusion": "FAILURE"}])
+    assert ship_update(target=work, run=run) == 0
+    out = capsys.readouterr().out
+    assert any("run rerun 999" in c and "--failed" in c for c in calls)   # re-triggered the failed CI
+    assert "stuck" in out.lower() and "#42" in out
+    assert not any("pr create" in c for c in calls)                        # recovered in place, not re-shipped
+
+
+def test_ship_update_waits_when_inflight_pr_is_healthy(tmp_path, capsys):
+    origin, work = _seeded_with_remote(tmp_path)
+    calls = []
+    run = _inflight_run(calls, rollup=[{"name": "gates", "status": "IN_PROGRESS", "conclusion": None}])
+    assert ship_update(target=work, run=run) == 0
+    out = capsys.readouterr().out
+    assert "Already shipped as PR #42" in out and "git pull" in out
+    assert not any("run rerun" in c for c in calls)                        # healthy → nothing to recover
+
+
+def test_ship_update_recreates_when_pr_behind(tmp_path, capsys):
+    origin, work = _seeded_with_remote(tmp_path)
+    calls = []
+    # behind base, no failing checks → close it and re-ship a fresh PR on current main.
+    run = _inflight_run(calls, rollup=[{"name": "gates", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+                        merge_state="BEHIND")
+    assert ship_update(target=work, run=run) == 0
+    joined = "\n".join(calls)
+    assert "pr close 42" in joined and "pr create" in joined               # closed the stuck one, re-shipped
+
+
+def test_ship_update_inflight_health_unknown_degrades_to_wait(tmp_path, capsys):
+    origin, work = _seeded_with_remote(tmp_path)
+    calls = []
+
+    def run(args, stdin=None, timeout=None, capture=True):
+        calls.append(" ".join(str(a) for a in args))
+        if args and args[0] == "gh":
+            j = " ".join(args)
+            if "auth status" in j:
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if "pr list" in j:
+                return SimpleNamespace(returncode=0,
+                                       stdout='[{"number": 42, "headRefName": "emkeel-maint/0.1.73-xy"}]', stderr="")
+            if "pr view" in j:                       # health can't be read (gh hiccup)
+                return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return subprocess.run(args, capture_output=True, text=True)
+
+    assert ship_update(target=work, run=run) == 0
+    out = capsys.readouterr().out
+    assert "Already shipped as PR #42" in out                               # offline-safe: fall back to wait
+    assert not any("run rerun" in c for c in calls)
+
+
+# ── maint_pr_status / recover_maint_pr unit tests (KEEL-88) ────────────────────
+
+from emkeel.ship import maint_pr_status, recover_maint_pr
+
+
+def _gh_view(rollup, merge_state="CLEAN", rc=0, stdout=None):
+    import json as _json
+    body = _json.dumps({"headRefName": "emkeel-maint/0.1.73-z", "mergeStateStatus": merge_state,
+                        "statusCheckRollup": rollup}) if stdout is None else stdout
+    return lambda args, **k: SimpleNamespace(returncode=rc, stdout=body, stderr="")
+
+
+def test_maint_pr_status_failing():
+    r = maint_pr_status("o/r", 42, run=_gh_view([{"conclusion": "FAILURE"}]))
+    assert r["health"] == "failing" and r["branch"] == "emkeel-maint/0.1.73-z"
+
+
+def test_maint_pr_status_behind():
+    r = maint_pr_status("o/r", 42, run=_gh_view([{"conclusion": "SUCCESS"}], merge_state="BEHIND"))
+    assert r["health"] == "behind"
+
+
+def test_maint_pr_status_healthy_when_pending():
+    r = maint_pr_status("o/r", 42, run=_gh_view([{"status": "IN_PROGRESS", "conclusion": None}]))
+    assert r["health"] == "healthy"
+
+
+def test_maint_pr_status_status_context_state():
+    # legacy StatusContext entries expose `state`, not `conclusion`.
+    r = maint_pr_status("o/r", 42, run=_gh_view([{"state": "FAILURE"}]))
+    assert r["health"] == "failing"
+
+
+def test_maint_pr_status_unknown_on_error_and_bad_json():
+    assert maint_pr_status("o/r", 42, run=_gh_view([], rc=1))["health"] == "unknown"
+    assert maint_pr_status("o/r", 42, run=_gh_view([], stdout="not json"))["health"] == "unknown"
+
+
+def _recover_run(calls, *, rid="999", rerun_rc=0):
+    def run(args, **k):
+        j = " ".join(str(a) for a in args)
+        calls.append(j)
+        if "run list" in j:
+            return SimpleNamespace(returncode=0, stdout=rid, stderr="")
+        if "run rerun" in j:
+            return SimpleNamespace(returncode=rerun_rc, stdout="", stderr="boom" if rerun_rc else "")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    return run
+
+
+def test_recover_behind_closes_and_recreates():
+    calls = []
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "behind", run=_recover_run(calls))
+    assert mode == "recreate" and "pr close 42" in "\n".join(calls) and "behind" in msg
+
+
+def test_recover_failing_reruns_and_waits():
+    calls = []
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "failing", run=_recover_run(calls))
+    assert mode == "wait"
+    assert any("run rerun 999" in c and "--failed" in c for c in calls) and "re-ran" in msg
+
+
+def test_recover_failing_no_run_found():
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "failing", run=_recover_run([], rid=""))
+    assert mode == "wait" and "no failed run" in msg
+
+
+def test_recover_failing_rerun_errors_is_reported():
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "failing", run=_recover_run([], rerun_rc=1))
+    assert mode == "wait" and "couldn't rerun" in msg
+
+
 def test_ship_update_nothing_when_current(tmp_path):
     origin, work = _seed_repo(tmp_path)                       # apply == current templates
     _git(["add", "-A"], work)
