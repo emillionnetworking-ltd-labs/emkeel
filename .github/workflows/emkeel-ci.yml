@@ -1,0 +1,70 @@
+name: emkeel-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # full history so check_maint_scope can diff against the base
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install emkeel
+        run: pip install "emkeel"
+      - name: "Gate - ticket link"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+          # Secrets let the gate verify the ticket EXISTS in Jira (404 -> hard fail). Absent -> syntax-only warning.
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: python -m emkeel.gates.check_ticket_link
+      - name: "Gate - maintenance scope (emkeel-maint lane only)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_maint_scope
+      - name: "Gate - dependabot scope (dependabot lane only)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_dependabot_scope
+      - name: "Gate - plan present (features)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_plan_present
+      - name: "Gate - acceptance criteria (features)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_acceptance_criteria
+      - name: "Gate - strategy link (features; dormant until a strategy exists)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_strategy_link
+      - name: "Gate - strategy quality (every strategy doc is sourced + complete)"
+        if: github.event_name == 'pull_request'
+        run: python -m emkeel.gates.check_strategy_quality
+      - name: "Gate - strategy change (north star only on a strategy/ lane)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_strategy_change
+      - name: "Gate - strategy alignment (feature acknowledges the north star)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+        run: python -m emkeel.gates.check_strategy_alignment
