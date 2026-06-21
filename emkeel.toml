@@ -10,5 +10,6 @@ project_key = "KEEL"
 repo = "emillionnetworking-ltd-labs/emkeel"
 
 [emkeel]
+self = true   # this IS the emkeel repo: exempt the distributed wiring templates (KEEL-95)
 source = "emkeel"
 generated_with = "0.1.76"   # the Emkeel version that wrote this wiring (emkeel doctor checks it)

@@ -72,6 +72,54 @@ def test_wiring_drift_ignores_toml_stamp(tmp_path):
     assert "emkeel.toml" not in wiring_drift(tmp_path)
 
 
+# ── self-governance: emkeel's OWN repo exempts the DISTRIBUTED wiring it doesn't use (KEEL-95) ──
+
+def _mark_self(tmp_path):
+    (tmp_path / "emkeel.toml").write_text(
+        (tmp_path / "emkeel.toml").read_text(encoding="utf-8") + "self = true\n")
+
+
+def test_wiring_drift_consumer_flags_distributed(tmp_path):
+    # baseline (consumer): a drifted distributed file IS reported — em-ecosystem behavior, unchanged.
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("drifted")
+    assert "AGENTS.md" in wiring_drift(tmp_path)
+
+
+def test_wiring_drift_self_repo_exempts_distributed(tmp_path):
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("emkeel's bespoke contract")     # would-be drift
+    _mark_self(tmp_path)                                                  # mark this repo as emkeel itself
+    drift = wiring_drift(tmp_path)
+    for f in ("AGENTS.md", "CLAUDE.md", ".github/workflows/emkeel-ci.yml",
+              ".github/workflows/jira-transition.yml", ".claude/skills/strategy/SKILL.md"):
+        assert f not in drift                                            # distributed wiring exempt for self
+
+
+def test_self_repo_nudge_suppresses_update_keeps_connect(tmp_path):
+    from emkeel.doctor import wiring_nudge
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("bespoke")                        # distributed drift
+    (tmp_path / "emkeel.toml").write_text(
+        (tmp_path / "emkeel.toml").read_text().replace('generated_with = "', 'self = true\ngenerated_with = "', 1))
+    # force a stale stamp too — for a consumer this alone would nudge `update`; for self it must not.
+    import re
+    txt = (tmp_path / "emkeel.toml").read_text()
+    (tmp_path / "emkeel.toml").write_text(re.sub(r'generated_with = "[^"]+"', 'generated_with = "0.0.1"', txt))
+    msg = wiring_nudge(tmp_path) or ""
+    assert "emkeel update" not in msg                                    # distributed drift + stale stamp exempt
+    assert "emkeel connect" in msg                                       # missing scoped .env still surfaces
+
+
+def test_consumer_nudge_still_flags_update(tmp_path):
+    from emkeel.doctor import wiring_nudge
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / "AGENTS.md").write_text("drifted")
+    assert "emkeel update" in (wiring_nudge(tmp_path) or "")             # consumer unchanged
+
+
 # ── distribution consistency: init (scratch) and update (refresh) deliver the SAME wiring (KEEL-91) ──
 
 def test_init_equals_update_managed_files_identical(tmp_path):

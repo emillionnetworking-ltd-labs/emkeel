@@ -300,6 +300,27 @@ def test_wiring_nudge_clean_when_current(tmp_path, monkeypatch):
     assert wiring_nudge(tmp_path) is None                  # up to date + cred present → silent
 
 
+# ── "All set ✓" must not contradict a ⚠ (KEEL-95) ──────────────────────────────
+
+_BASE_OK = {"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+            "secrets_ok": True, "protection_ok": True}
+
+
+def test_not_all_set_when_drift_present():
+    r = report_lines({**_BASE_OK, "drift": ["AGENTS.md"]})
+    assert _has(r, "out of date") and _has(r, "pending") and not _has(r, "All set")
+
+
+def test_not_all_set_when_scoped_env_missing():
+    r = report_lines({**_BASE_OK, "drift": [], "env_scoped_ok": False})
+    assert _has(r, "scoped local credential") and _has(r, "pending") and not _has(r, "All set")
+
+
+def test_all_set_when_truly_clean():
+    r = report_lines({**_BASE_OK, "drift": [], "env_scoped_ok": True})
+    assert _has(r, "All set")                              # no ⚠ → honest "All set ✓"
+
+
 def test_gather_detects_scoped_env(tmp_path, monkeypatch):
     import emkeel.doctor as doctor
     from emkeel.init import Config, apply
