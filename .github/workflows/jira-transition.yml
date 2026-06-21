@@ -10,15 +10,14 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install emkeel
-        run: pip install -e .
+        run: pip install "emkeel"
       - name: Transition linked ticket to Done
         # No blind continue-on-error: benign cases (already Done, secrets missing) succeed in code;
-        # a REAL failure (404 / POST failed / status didn't land on Done) now surfaces red via ::error::.
+        # a REAL failure (404 / POST failed / status didn't land on Done) surfaces red via ::error::.
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
