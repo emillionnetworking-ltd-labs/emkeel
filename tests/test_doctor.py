@@ -262,6 +262,31 @@ def test_current_wiring_no_nudge():
     assert not _has(r, "emkeel update")
 
 
+# ── scoped local credential gap (KEEL-93) ──────────────────────────────────────
+
+def test_doctor_flags_missing_scoped_env():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True, "drift": [], "env_scoped_ok": False})
+    assert _has(r, "scoped local credential") and _has(r, "emkeel connect")
+    assert _has(r, "credencial local")                       # bilingual
+
+
+def test_doctor_silent_when_scoped_env_present():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True, "drift": [], "env_scoped_ok": True})
+    assert not _has(r, "scoped local credential")
+
+
+def test_gather_detects_scoped_env(tmp_path, monkeypatch):
+    import emkeel.doctor as doctor
+    from emkeel.init import Config, apply
+    apply(tmp_path, Config(github_repo="a/b"), force=False, dry_run=False)
+    monkeypatch.setattr("emkeel.update.wiring_drift", lambda target: [])
+    assert doctor.gather(tmp_path)["env_scoped_ok"] is False    # no .env yet
+    (tmp_path / ".env").write_text("GH_TOKEN=github_pat_x\n")
+    assert doctor.gather(tmp_path)["env_scoped_ok"] is True
+
+
 def test_drift_with_inflight_pr_points_to_pr_not_rerun(monkeypatch):
     # KEEL-84: a refresh already in flight → don't nag 'run: emkeel update'.
     r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
