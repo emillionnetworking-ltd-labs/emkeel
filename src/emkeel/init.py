@@ -356,10 +356,11 @@ def _agents_md() -> str:
 Rules that matter live in CI + branch protection, not here (this file is best-effort).
 
 ## How to respond
-- Lead with the answer or recommendation. Detail only if it changes the decision.
+Communicate like an engineer briefing the team: clear, decisive, and pointing to the right next step.
+- Lead with the answer, verdict, or recommendation. Detail only if it changes the decision.
+- Discrete facts, results, or steps → a list, one per line. Reasoning or explanation → a short paragraph. Never chain separate facts with ";" on one line.
 - Precise but brief: no repetition, no tangents, no re-explaining what's known.
-- Prefer a short list or table over long prose.
-- Proposing something? State the proposal in one clear line first.
+- When you propose something, state it in one clear line and name the next step.
 
 ## Loop
 1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
