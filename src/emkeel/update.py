@@ -79,7 +79,7 @@ def wiring_drift(target: Path) -> list[str]:
         return []
     import subprocess
 
-    from emkeel.init import MERGE_FILES, _files
+    from emkeel.init import APPEND_LINES, MERGE_FILES, _files
     default = _origin_default(target)
 
     def _origin_or_local(path: str) -> str | None:
@@ -99,6 +99,12 @@ def wiring_drift(target: Path) -> list[str]:
             if (committed or "") != content:
                 drift.append(path)
         elif committed is not None and committed != content:
+            drift.append(path)
+    # Append manifests (.gitignore/.gitattributes) drift when emkeel's line isn't present yet — the SAME
+    # set `init` would deliver, so `update`/`doctor` must verify it too (not just _files + MERGE_FILES).
+    for path, line in APPEND_LINES.items():
+        content = _origin_or_local(path)
+        if content is None or line not in content.splitlines():
             drift.append(path)
     # Merge files (e.g. .claude/settings.json) drift when the emkeel hook isn't wired in yet.
     for path, fn in MERGE_FILES.items():
