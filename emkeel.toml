@@ -11,5 +11,6 @@ repo = "emillionnetworking-ltd-labs/emkeel"
 # required_checks = ["gates", "Security Gate (All Checks)"]
 
 [emkeel]
+self = true   # this IS the emkeel repo: exempt the distributed wiring templates (KEEL-95/96)
 source = "emkeel"
 generated_with = "0.1.81"   # the Emkeel version that wrote this wiring (emkeel doctor checks it)
