@@ -5,7 +5,8 @@ import json
 from emkeel.isolation import decide, find_identity, main
 
 # Identity of "this" repo: /home/me/projects/emkeel, governed by KEEL + owner/emkeel.
-IDENT = {"repo": "owner/emkeel", "project_key": "KEEL", "root": "/home/me/projects/emkeel"}
+IDENT = {"repo": "owner/emkeel", "project_key": "KEEL", "root": "/home/me/projects/emkeel",
+         "jira_host": "me.atlassian.net"}
 CWD = "/home/me/projects/emkeel"
 
 
@@ -72,6 +73,50 @@ def test_denies_edit_into_sibling_repo():
     assert _edit("/home/me/projects/em-ecosystem/x.py", tool="Read")[0] == "deny"   # cross read too
 
 
+# ── raw API bypass (KEEL-92): curl/python straight to Jira/GitHub must be screened too ──
+
+def test_denies_raw_jira_api_foreign_project():
+    # the exact bypass: a raw curl to the Jira REST API creating an issue in ANOTHER project.
+    cmds = [
+        """curl -s me.atlassian.net/rest/api/3/issue -d '{"fields":{"project":{"key":"ECO"}}}'""",
+        """python -c "import requests; requests.post('https://me.atlassian.net/rest/api/3/issue', json={'fields':{'project':{'key':'ECO'}}})" """,
+        """curl 'https://me.atlassian.net/rest/api/2/search?jql=project=ECO'""",
+        """curl -X POST https://me.atlassian.net/rest/api/3/issue/ECO-7/transitions -d '{...}'""",  # transition a foreign issue
+    ]
+    for c in cmds:
+        d, why = _bash(c)
+        assert d == "deny" and "ECO" in why, c
+
+
+def test_allows_raw_jira_api_own_project():
+    for c in (
+        """curl -s me.atlassian.net/rest/api/3/issue -d '{"fields":{"project":{"key":"KEEL"}}}'""",
+        """curl 'https://me.atlassian.net/rest/api/2/search?jql=project=KEEL ORDER BY created'""",
+        """curl -X POST https://me.atlassian.net/rest/api/3/issue/KEEL-9/transitions -d '{}'""",
+    ):
+        assert _bash(c)[0] == "allow", c
+
+
+def test_denies_raw_github_api_other_repo():
+    d, why = _bash("curl -s https://api.github.com/repos/owner/em-ecosystem/pulls -d '{}'")
+    assert d == "deny" and "em-ecosystem" in why
+    assert _bash("curl https://api.github.com/repos/owner/em-ecosystem/issues")[0] == "deny"
+
+
+def test_allows_raw_github_api_own_repo():
+    assert _bash("curl -s https://api.github.com/repos/owner/emkeel/pulls")[0] == "allow"
+
+
+def test_raw_api_fail_safe_no_false_positives():
+    # no API indicator, or a project word with no foreign key → ALLOW (never brick).
+    for c in ("curl https://example.com/data.json",
+              "echo project=KEEL",
+              "python script.py --project KEEL",                # own project mentioned
+              "curl https://api.github.com/repos/owner/emkeel/commits",
+              "grep -r project= ."):
+        assert _bash(c)[0] == "allow", c
+
+
 # ── auto-protection: can't edit away the guard ─────────────────────────────────
 
 def test_denies_editing_guard_config():
@@ -110,10 +155,12 @@ def test_main_fail_safe_on_garbage(monkeypatch, capsys):
 
 
 def test_find_identity_reads_toml(tmp_path):
-    (tmp_path / "emkeel.toml").write_text('[github]\nrepo="o/r"\n[jira]\nproject_key="ECO"\n')
+    (tmp_path / "emkeel.toml").write_text(
+        '[jira]\nbase_url="https://acme.atlassian.net"\nproject_key="ECO"\n[github]\nrepo="o/r"\n')
     sub = tmp_path / "a" / "b"; sub.mkdir(parents=True)
     ident = find_identity(sub)                                 # walks up to the toml
-    assert ident == {"repo": "o/r", "project_key": "ECO", "root": str(tmp_path)}
+    assert ident == {"repo": "o/r", "project_key": "ECO", "jira_host": "acme.atlassian.net",
+                     "root": str(tmp_path)}
 
 
 def test_find_identity_none_when_absent(tmp_path):

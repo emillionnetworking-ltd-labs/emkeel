@@ -69,8 +69,15 @@ Both paths funnel through the same `init.apply()` manifest, so they install iden
 - **Inherited by every governed repo** via PyPI; emkeel governs itself too.
 - **Zero-dependency**: stdlib only (`tomllib`, `json`, `re`, `pathlib`). The decision logic is a pure
   function, unit-tested without a filesystem or network.
+- **Raw-API coverage (KEEL-92)**: beyond `gh -R` / `git push` / `emkeel jira --project`, `decide` also
+  denies a **raw `curl`/`python` straight to the API** — a Jira REST call (`*.atlassian.net` / the repo's
+  `base_url` host / a `/rest/api/**` path) carrying a project key ≠ `project_key` (the create / `jql=` /
+  `/issue/<KEY>` transition forms, double- and single-quoted), and an `api.github.com/repos/<owner>/<repo>`
+  call to a repo ≠ `repo`. A call to the repo's OWN project/repo, or a command with no API indicator, is
+  allowed (fail-safe).
 - **Known limits (deliberate, for fail-safe)**: "another repo" is detected as a sibling under the same
-  parent directory — an absolute path to an unrelated repo elsewhere on disk isn't flagged; and the
-  hook screens `Bash`/`Edit`/`Write` (not `Read`) by default, though `decide` supports `Read` for repos
-  that opt in. Tightening these is a follow-on if a real crossing slips through; widening blindly would
-  risk bricking, which this ADR ranks as the worse failure.
+  parent directory — an absolute path to an unrelated repo elsewhere on disk isn't flagged; the hook
+  screens `Bash`/`Edit`/`Write` (not `Read`) by default, though `decide` supports `Read` for repos that
+  opt in; and raw-API detection keys off recognizable Jira/GitHub markers — an exotic proxy/host or an
+  obfuscated key may not be flagged. Tightening these is a follow-on if a real crossing slips through;
+  widening blindly would risk bricking, which this ADR ranks as the worse failure.
