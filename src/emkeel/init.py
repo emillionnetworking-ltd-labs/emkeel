@@ -355,6 +355,12 @@ def _agents_md() -> str:
 
 Rules that matter live in CI + branch protection, not here (this file is best-effort).
 
+## How to respond
+- Lead with the answer or recommendation. Detail only if it changes the decision.
+- Precise but brief: no repetition, no tangents, no re-explaining what's known.
+- Prefer a short list or table over long prose.
+- Proposing something? State the proposal in one clear line first.
+
 ## Loop
 1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.
