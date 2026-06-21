@@ -185,6 +185,17 @@ def test_scaffolds_strategy_dir(tmp_path):
     assert (tmp_path / "emkeel-governance/strategy/.gitkeep").is_file()
 
 
+def test_scaffolds_scoped_credential_wiring(tmp_path):
+    # KEEL-93: the NON-secret scaffold for per-repo scoped creds (no secrets written by init).
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    envrc = (tmp_path / ".envrc").read_text()
+    assert "source .envrc" in envrc or ". ./.env" in envrc            # the per-repo loader
+    example = (tmp_path / ".env.example").read_text()
+    assert "GH_TOKEN" in example and "fine-grained" in example.lower()
+    assert ".env" in (tmp_path / ".gitignore").read_text().splitlines()   # .env stays gitignored
+    assert not (tmp_path / ".env").exists()                          # init NEVER writes the secret .env
+
+
 def test_ci_includes_strategy_gate(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     assert "check_strategy_link" in (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()

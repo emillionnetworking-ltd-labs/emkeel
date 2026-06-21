@@ -76,7 +76,7 @@ def test_existing_repo_flow(tmp_path, monkeypatch, capsys):
         ran.append(" ".join(args))
         return _ok()
 
-    answers = iter(["y", "y", "me@x.co", "n"])           # protect? secrets? email; finish-adopt? (no)
+    answers = iter(["y", "y", "me@x.co", "n", "n"])      # protect? secrets? email; local-cred?(no) finish-adopt?(no)
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run, lang="en") == 0
     joined = "\n".join(ran)
     assert "repo view a/b" in joined                      # checked existence (existing → skip create)
@@ -95,7 +95,7 @@ def test_new_repo_creates_and_pushes(tmp_path, monkeypatch):
         ran.append(joined)
         return _fail() if "repo view" in joined else _ok()   # not on GitHub yet
 
-    answers = iter(["y", "y", "n", "n"])                  # create+push? protect? secrets?(no) finish-adopt?(no)
+    answers = iter(["y", "y", "n", "n", "n"])             # create+push? protect? secrets?(no) local-cred?(no) finish-adopt?(no)
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "TOK", run=run, lang="en") == 0
     assert any("repo create a/b" in r and "--push" in r for r in ran)   # created + pushed
 
@@ -126,7 +126,7 @@ def test_finish_adopt_pushes_pr_and_automerges(tmp_path, monkeypatch):
             return SimpleNamespace(returncode=0, stdout="chore/SCRUM-1-adopt-emkeel", stderr="")
         return _ok()
 
-    answers = iter(["n", "n", "y", "n"])                  # protect?(no) secrets?(no) finish-adopt?(yes) wait-sync?(no)
+    answers = iter(["n", "n", "n", "y", "n"])             # protect?(no) secrets?(no) local-cred?(no) finish-adopt?(yes) wait-sync?(no)
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run, lang="en") == 0
     joined = "\n".join(ran)
     assert "git push -u origin HEAD" in joined
@@ -147,7 +147,7 @@ def test_finish_adopt_skipped_on_default_branch(tmp_path, monkeypatch):
             return SimpleNamespace(returncode=0, stdout="main", stderr="")   # on the default branch
         return _ok()
 
-    answers = iter(["n", "n"])                            # protect?(no) secrets?(no) — NO finish-adopt prompt
+    answers = iter(["n", "n", "n"])                       # protect?(no) secrets?(no) local-cred?(no) — NO finish-adopt prompt
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "T", run=run, lang="en") == 0
     assert not any("pr merge" in r for r in ran)          # no auto-merge offered on the default branch
 
@@ -180,7 +180,60 @@ def test_secrets_not_saved_when_jira_login_fails(tmp_path, monkeypatch):
         if "rev-parse" in " ".join(args):
             return SimpleNamespace(returncode=0, stdout="main", stderr="")  # on default → no finish-adopt
         return _ok()
-    # protect?(n) secrets?(y) email, [verify fails] retry?(n)
-    answers = iter(["n", "y", "me@x.co", "n"])
+    # protect?(n) secrets?(y) email, [verify fails] retry?(n) local-cred?(n)
+    answers = iter(["n", "y", "me@x.co", "n", "n"])
     assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "bad", run=run, lang="en") == 0
     assert not any("secret set JIRA_TOKEN" in r for r in ran)   # never saved the bad creds
+
+
+# ── scoped local credential (.env) — KEEL-93 ──────────────────────────────────
+
+import os
+import stat
+
+from emkeel.connect import write_env
+
+
+def test_write_env_creates_600_and_idempotent(tmp_path):
+    p = write_env(tmp_path, {"GH_TOKEN": "github_pat_abc", "JIRA_TOKEN": "jt"})
+    assert p == tmp_path / ".env"
+    assert "GH_TOKEN=github_pat_abc" in p.read_text() and "JIRA_TOKEN=jt" in p.read_text()
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600                  # owner-only
+    write_env(tmp_path, {"GH_TOKEN": "github_pat_abc", "JIRA_TOKEN": "jt"})   # re-run
+    assert p.read_text().count("GH_TOKEN=") == 1                      # idempotent, no duplicates
+
+
+def test_write_env_preserves_other_vars(tmp_path):
+    (tmp_path / ".env").write_text("MY_OWN=keepme\nGH_TOKEN=old\n")
+    write_env(tmp_path, {"GH_TOKEN": "new"})
+    body = (tmp_path / ".env").read_text()
+    assert "MY_OWN=keepme" in body                                    # untouched user var
+    assert "GH_TOKEN=new" in body and "GH_TOKEN=old" not in body      # updated in place
+
+
+def test_connect_local_cred_writes_env_hidden_pat(tmp_path, monkeypatch, capsys):
+    _toml(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    def run(args, stdin=None, timeout=None, capture=True):
+        if "rev-parse" in " ".join(args):
+            return SimpleNamespace(returncode=0, stdout="main", stderr="")   # default branch → no finish
+        return _ok()
+
+    pats = iter(["github_pat_SCOPED"])                    # the hidden PAT paste (getpass)
+    # protect?(n) secrets?(n) local-cred?(y)
+    answers = iter(["n", "n", "y"])
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: next(pats), run=run, lang="en") == 0
+    env = (tmp_path / ".env").read_text()
+    assert "GH_TOKEN=github_pat_SCOPED" in env                        # the scoped PAT landed in .env
+    assert stat.S_IMODE(os.stat(tmp_path / ".env").st_mode) == 0o600
+    out = capsys.readouterr().out
+    assert "direnv allow" in out and "github_pat_SCOPED" not in out   # guided activation; PAT never echoed
+
+
+def test_dry_run_mentions_scoped_local_credential(tmp_path, monkeypatch, capsys):
+    _toml(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert main(["--dry-run"], run=lambda *a, **k: _ok()) == 0
+    out = capsys.readouterr().out
+    assert ".env" in out and "GH_TOKEN" in out and "direnv" in out

@@ -2,7 +2,9 @@
 
 Idempotent and non-clobbering: existing files are reported "skip-exists" and left
 untouched (use --force to overwrite), EXCEPT .gitattributes/.gitignore which get a
-missing line appended. Secrets are NEVER written — only `.env.example` (a template).
+missing line appended. `init` NEVER writes secrets — only the non-secret scaffold
+(`.env.example`, `.envrc`). The SCOPED local credential (`.env`, gitignored + chmod
+600) is written by `emkeel connect` from a hidden paste (see ADR-0007).
 
 CLI:  python -m emkeel.init [TARGET] --jira-url URL --jira-project KEY --github-repo OWNER/REPO
       [--emkeel-source SRC] [--dry-run] [--force]
@@ -59,6 +61,7 @@ def _files(cfg: Config) -> dict[str, str]:
         ".github/workflows/jira-transition.yml": _jira_yaml(cfg.emkeel_source),
         "emkeel.toml": _toml(cfg),
         ".env.example": _env_example(),
+        ".envrc": _envrc(),
         "AGENTS.md": _agents_md(),
         "CLAUDE.md": _claude_md(),
         ".claude/skills/strategy/SKILL.md": _strategy_skill(),
@@ -185,10 +188,24 @@ def _toml(cfg: Config) -> str:
 
 def _env_example() -> str:
     return (
-        "# Emkeel — Jira credentials. Copy to .env (gitignored) or set as GitHub Secrets.\n"
-        "# NEVER commit the real values.\n"
+        "# Emkeel — per-repo SCOPED credentials. Copy to .env (gitignored, chmod 600); NEVER commit real values.\n"
+        "# `emkeel connect` writes .env for you (hidden paste). Activate per-repo loading: `direnv allow` (or `source .envrc`).\n"
+        "# GH_TOKEN: a GitHub fine-grained PAT scoped to THIS repo (Contents RW, Pull requests RW, Metadata R).\n"
+        "GH_TOKEN=github_pat_scoped_to_THIS_repo\n"
+        "JIRA_BASE_URL=https://you.atlassian.net\n"
         "JIRA_EMAIL=you@example.com\n"
         "JIRA_TOKEN=your-atlassian-api-token\n"
+    )
+
+
+def _envrc() -> str:
+    """Per-repo env loader. Plain bash (direnv runs it; also `source`-able by hand) → exports this repo's
+    .env so its scoped creds live ONLY in this window. Non-secret (it just loads .env) → committed."""
+    return (
+        "# emkeel — per-repo environment. Run `direnv allow` once to auto-load on `cd` into this repo\n"
+        "# (or `source .envrc` manually). Loads .env (gitignored, chmod 600): GH_TOKEN + JIRA_* scoped to\n"
+        "# THIS repo, so an agent in this window can't reach another repo's GitHub/Jira.\n"
+        "if [ -f .env ]; then set -a; . ./.env; set +a; fi\n"
     )
 
 

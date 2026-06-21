@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 import getpass as _getpass
 import json
+import os
+import re
 import subprocess
 import tomllib
 from dataclasses import dataclass
@@ -25,6 +27,31 @@ from emkeel.i18n import ask_language, is_yes, t
 from emkeel.ui import spin
 
 TOKEN_LINK = "https://id.atlassian.net/manage-profile/security/api-tokens"
+# Fine-grained PAT scoped to ONE repo (Settings → Developer settings → Fine-grained tokens).
+PAT_LINK = "https://github.com/settings/personal-access-tokens/new"
+
+
+def write_env(target: Path, values: dict[str, str]) -> Path:
+    """Upsert KEY=value lines into `target/.env`, PRESERVING any other vars the user has, then chmod 600.
+
+    This is the per-repo scoped-credential file (gitignored). Idempotent: re-writing the same values is a
+    content no-op. Never clobbers unrelated lines — only the keys in `values` are replaced/appended."""
+    path = target / ".env"
+    existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    out, seen = [], set()
+    for ln in existing:
+        m = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", ln)
+        if m and m.group(1) in values:
+            out.append(f"{m.group(1)}={values[m.group(1)]}")
+            seen.add(m.group(1))
+        else:
+            out.append(ln)
+    for k, v in values.items():
+        if k not in seen:
+            out.append(f"{k}={v}")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    os.chmod(path, 0o600)                                  # local secrets are owner-only
+    return path
 
 T: dict[str, dict[str, str]] = {
     "no_toml":   {"es": "  No hay emkeel.toml aquí — corre `emkeel setup` primero.",
@@ -66,6 +93,25 @@ T: dict[str, dict[str, str]] = {
     "q_retry":   {"es": "  ¿Reintentar? [S/n] ", "en": "  Try again? [Y/n] "},
     "sec_skip":  {"es": "  Secrets omitidos — config luego con `emkeel connect` (o en Settings del repo).",
                   "en": "  Skipped secrets — set them later with `emkeel connect` (or in repo Settings)."},
+    "dry_local": {"es": "    • escribir .env (chmod 600) con GH_TOKEN (PAT fine-grained de ESTE repo) + creds Jira; activar carga por-repo (direnv allow / source .envrc)",
+                  "en": "    • write .env (chmod 600) with GH_TOKEN (fine-grained PAT scoped to THIS repo) + Jira creds; activate per-repo loading (direnv allow / source .envrc)"},
+    "q_local":   {"es": "  ¿Aislar la credencial LOCAL? (PAT fine-grained de este repo → .env oculto+600) [S/n] ",
+                  "en": "  Isolate the LOCAL credential? (fine-grained PAT for this repo → hidden .env, 600) [Y/n] "},
+    "pat_guide": {"es": ("  Crea un GitHub fine-grained PAT acotado a ESTE repo:\n"
+                         "    {link}\n"
+                         "    • Repository access → Only select repositories → {repo}\n"
+                         "    • Permissions (mínimos): Contents = Read and write · Pull requests = Read and write · Metadata = Read"),
+                  "en": ("  Create a GitHub fine-grained PAT scoped to THIS repo:\n"
+                         "    {link}\n"
+                         "    • Repository access → Only select repositories → {repo}\n"
+                         "    • Permissions (minimum): Contents = Read and write · Pull requests = Read and write · Metadata = Read")},
+    "pat_q":     {"es": "  Pega el PAT (oculto, no pasa por el chat): ", "en": "  Paste the PAT (hidden, never via chat): "},
+    "env_written":{"es": "  ✓ .env escrito (chmod 600, gitignored) — {keys}", "en": "  ✓ wrote .env (chmod 600, gitignored) — {keys}"},
+    "env_activate":{"es": "  Actívalo en ESTA ventana (carga solo este .env):  direnv allow   (o:  source .envrc)",
+                    "en": "  Activate it in THIS window (loads only this .env):  direnv allow   (or:  source .envrc)"},
+    "env_empty": {"es": "  Nada que escribir (sin PAT ni creds Jira) — re-corre `emkeel connect`.",
+                  "en": "  Nothing to write (no PAT or Jira creds) — re-run `emkeel connect`."},
+    "w_env":     {"es": "Escribiendo .env (600)", "en": "Writing .env (600)"},
     "q_finish":  {"es": "  Terminar la adopción — subir '{cur}', abrir PR y auto-merge al pasar los gates? [s/N] ",
                   "en": "  Finish the adopt — push '{cur}', open a PR and auto-merge when gates pass? [y/N] "},
     "pushing":   {"es": "  Subiendo… (verás la salida de git; un pre-push hook puede tardar — Ctrl-C para saltar)",
@@ -231,6 +277,7 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
         print(t(T, "dry_create", lang).format(repo=repo))
         print(t(T, "dry_prot", lang).format(repo=repo, branch=branch))
         print(t(T, "dry_sec", lang).format(repo=repo))
+        print(t(T, "dry_local", lang))
         print(t(T, "dry_ship", lang))
         print(t(T, "dry_manual", lang).format(link=TOKEN_LINK))
         return 0
@@ -262,6 +309,7 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
         print(t(T, "ok_protect", lang) if ok else t(T, "fail_protect", lang).format(msg=msg))
 
     # 3) Secrets — token via hidden prompt; verified before saving; never in chat/logs
+    email = token = ""          # also reused below for the per-repo .env (scoped local credential)
     if is_yes(inp(t(T, "q_secrets", lang))):
         print(t(T, "tok_first", lang).format(link=TOKEN_LINK))
         while True:
@@ -283,6 +331,25 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
                            for name, val in (("JIRA_BASE_URL", cfg.base_url), ("JIRA_EMAIL", email), ("JIRA_TOKEN", token))]
             for name, ok, msg in results:
                 print(f"  {'✓' if ok else '✗'} {name}" + ("" if ok else f": {msg}"))
+
+    # 3b) Scoped LOCAL credential — a fine-grained GitHub PAT for THIS repo, written to .env (600).
+    # This is the per-window isolation: the agent's gh/git in this repo uses a token that can't touch
+    # another repo. The PAT is pasted HIDDEN (never via chat); .env is gitignored + chmod 600.
+    if is_yes(inp(t(T, "q_local", lang))):
+        print(t(T, "pat_guide", lang).format(repo=repo, link=PAT_LINK))
+        pat = getpass(t(T, "pat_q", lang)).strip()
+        env_vals: dict[str, str] = {}
+        if pat:
+            env_vals["GH_TOKEN"] = pat
+        if email and token:     # reuse the Jira creds collected above for the per-repo .env
+            env_vals.update({"JIRA_BASE_URL": cfg.base_url, "JIRA_EMAIL": email, "JIRA_TOKEN": token})
+        if env_vals:
+            with spin(t(T, "w_env", lang)):
+                write_env(Path("."), env_vals)
+            print(t(T, "env_written", lang).format(keys=", ".join(env_vals)))
+            print(t(T, "env_activate", lang))
+        else:
+            print(t(T, "env_empty", lang))
 
     # 4) Finish the adopt — push, PR, auto-merge (the adoption PR only; normal changes stay human-merged).
     cur = current_branch(run)
