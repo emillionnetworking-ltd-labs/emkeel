@@ -124,7 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     if not no_ship:
         # Default: refresh + ship in an isolated worktree — never touches YOUR working tree.
         from emkeel.ship import ship_update
-        return ship_update(target)
+        rc = ship_update(target)
+        if rc == 0:
+            _handoff_to_connect(target)
+        return rc
 
     # --no-ship: refresh the LOCAL working tree (you commit it yourself).
     from emkeel.init import APPEND_LINES, MERGE_FILES, _files
@@ -169,7 +172,17 @@ def main(argv: list[str] | None = None) -> int:
     if n_un:
         print(f"  ({n_un} file(s) already current)")
     print("\n(--no-ship: commit the refreshed files yourself, or run `emkeel update` to ship them)")
+    _handoff_to_connect(target)
     return 0
+
+
+def _handoff_to_connect(target: Path) -> None:
+    """After update delivers the wiring, if NEW config is still pending (the scoped local credential is
+    missing), hand off to the next step explicitly — the user knows WHICH command and WHICH variables."""
+    envp = target / ".env"
+    if not (envp.is_file() and "GH_TOKEN" in envp.read_text(encoding="utf-8", errors="replace")):
+        print("\n  → next / ahora: run `emkeel connect` to set the new config — GH_TOKEN (a fine-grained "
+              "PAT scoped to this repo)  ·  corre `emkeel connect` para configurar: GH_TOKEN scopeado")
 
 
 if __name__ == "__main__":

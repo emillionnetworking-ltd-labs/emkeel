@@ -16,6 +16,48 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(args, capture_output=True, text=True)
 
 
+def _generated_with(target: Path) -> str | None:
+    """The `generated_with` stamp in emkeel.toml (the emkeel version that wrote this repo's wiring), or
+    None. Cheap (one file read) — the local signal that the repo is behind the installed CLI."""
+    p = target / "emkeel.toml"
+    if not p.is_file():
+        return None
+    m = re.search(r'(?m)^\s*generated_with\s*=\s*"([^"]+)"', p.read_text(encoding="utf-8", errors="replace"))
+    return m.group(1) if m else None
+
+
+def _env_has_token(target: Path) -> bool:
+    envp = target / ".env"
+    return envp.is_file() and "GH_TOKEN" in envp.read_text(encoding="utf-8", errors="replace")
+
+
+def wiring_nudge(target: Path = Path(".")) -> str | None:
+    """A one-line, bilingual 'git-hint' (or None) for cli.py to print on any command: the repo's wiring is
+    behind the installed CLI, and/or the scoped local credential is missing. CHEAP + LOCAL (no network) and
+    FAIL-SAFE — returns None on anything ambiguous, never raises. Skips ungoverned repos."""
+    try:
+        if not (target / "emkeel.toml").is_file():
+            return None
+        from emkeel import __version__
+        from emkeel.version import _parse
+        lines: list[str] = []
+        gw = _generated_with(target)
+        stale = bool(gw and _parse(gw) < _parse(__version__))   # cheap stamp check (the upgrade signal)
+        if not stale:                                            # only pay for the git diff if the stamp matches
+            try:
+                from emkeel.update import wiring_drift
+                stale = bool(wiring_drift(target))
+            except Exception:
+                stale = False
+        if stale:
+            lines.append("⚠ emkeel: wiring desactualizado / wiring out of date → corre / run: emkeel update")
+        if not _env_has_token(target):
+            lines.append("  + config nueva / new config → corre / run: emkeel connect (GH_TOKEN scopeado)")
+        return "\n".join(lines) if lines else None
+    except Exception:
+        return None                                             # fail-safe: a hint must never break a command
+
+
 def _required_contexts(repo: str, branch: str, run=None) -> set[str] | None:
     """The set of status-check contexts enforced on `branch` — classic protection ∪ ruleset.
 

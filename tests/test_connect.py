@@ -237,3 +237,28 @@ def test_dry_run_mentions_scoped_local_credential(tmp_path, monkeypatch, capsys)
     assert main(["--dry-run"], run=lambda *a, **k: _ok()) == 0
     out = capsys.readouterr().out
     assert ".env" in out and "GH_TOKEN" in out and "direnv" in out
+
+
+def test_connect_state_aware_shows_state_and_skips_when_configured(tmp_path, monkeypatch, capsys):
+    # KEEL-94: everything already set → show ✓ state, ask only to CHANGE; user declines → nothing re-done.
+    _toml(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("GH_TOKEN=existing_pat\n")     # scoped cred already present
+    ran = []
+
+    def run(args, stdin=None, timeout=None, capture=True):
+        joined = " ".join(args)
+        ran.append(joined)
+        if "secret list" in joined:
+            return SimpleNamespace(returncode=0, stdout="JIRA_BASE_URL\nJIRA_EMAIL\nJIRA_TOKEN", stderr="")
+        if "rev-parse" in joined:
+            return SimpleNamespace(returncode=0, stdout="main", stderr="")    # default branch
+        return _ok()                                                          # protection GET → exists
+
+    answers = iter(["n", "n", "n"])                  # change protection?(n) reconfigure secrets?(n) rewrite .env?(n)
+    assert main([], inp=lambda *_: next(answers), getpass=lambda *_: "X", run=run, lang="en") == 0
+    out = capsys.readouterr().out
+    assert "already on" in out and "already set" in out and "already configured" in out   # state shown
+    assert not any("-X PUT" in r for r in ran)        # protection NOT re-applied
+    assert not any("secret set" in r for r in ran)    # secrets NOT re-set
+    assert (tmp_path / ".env").read_text() == "GH_TOKEN=existing_pat\n"   # .env untouched

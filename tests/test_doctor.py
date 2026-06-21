@@ -277,6 +277,29 @@ def test_doctor_silent_when_scoped_env_present():
     assert not _has(r, "scoped local credential")
 
 
+# ── wiring_nudge (KEEL-94): cheap local hint ──────────────────────────────────
+
+def test_wiring_nudge_none_when_ungoverned(tmp_path):
+    from emkeel.doctor import wiring_nudge
+    assert wiring_nudge(tmp_path) is None                  # no emkeel.toml → nothing to nudge
+
+
+def test_wiring_nudge_flags_stale_stamp_and_missing_cred(tmp_path):
+    from emkeel.doctor import wiring_nudge
+    (tmp_path / "emkeel.toml").write_text('[emkeel]\ngenerated_with = "0.0.1"\n')   # behind the CLI
+    msg = wiring_nudge(tmp_path)
+    assert msg and "emkeel update" in msg and "emkeel connect" in msg   # both pending, bilingual
+
+
+def test_wiring_nudge_clean_when_current(tmp_path, monkeypatch):
+    from emkeel import __version__
+    from emkeel.doctor import wiring_nudge
+    (tmp_path / "emkeel.toml").write_text(f'[emkeel]\ngenerated_with = "{__version__}"\n')
+    (tmp_path / ".env").write_text("GH_TOKEN=github_pat_x\n")
+    monkeypatch.setattr("emkeel.update.wiring_drift", lambda target: [])    # no drift either
+    assert wiring_nudge(tmp_path) is None                  # up to date + cred present → silent
+
+
 def test_gather_detects_scoped_env(tmp_path, monkeypatch):
     import emkeel.doctor as doctor
     from emkeel.init import Config, apply
