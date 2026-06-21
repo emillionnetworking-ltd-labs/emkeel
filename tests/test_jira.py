@@ -156,6 +156,7 @@ def test_secrets_present(monkeypatch):
 
 
 def test_main_warns_and_skips_without_secrets(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: None)   # ungoverned cwd → isolation guard off
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("EMKEEL_BRANCH", "feat/SCRUM-9-x")
@@ -176,6 +177,7 @@ def test_main_real_failure_emits_error_annotation(monkeypatch, capsys):
 # ── `emkeel jira create` CLI ───────────────────────────────────────────────────
 
 def test_cli_create_prints_key(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: None)   # ungoverned cwd → guard off
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.setenv(k, "x")
     monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "ECO-42"))
@@ -184,6 +186,7 @@ def test_cli_create_prints_key(monkeypatch, capsys):
 
 
 def test_cli_create_requires_secrets(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: None)
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.delenv(k, raising=False)
     assert J.main(["create", "--project", "ECO", "--summary", "x"]) == 1
@@ -191,6 +194,7 @@ def test_cli_create_requires_secrets(monkeypatch, capsys):
 
 
 def test_cli_create_then_transition(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: None)
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.setenv(k, "x")
     monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "ECO-50"))
@@ -198,3 +202,28 @@ def test_cli_create_then_transition(monkeypatch, capsys):
     monkeypatch.setattr(J, "transition_issue", lambda key, status="Done", **k: (seen.update(key=key, status=status), (True, "ok"))[1])
     assert J.main(["create", "--project", "ECO", "--summary", "x", "--status", "Done"]) == 0
     assert seen == {"key": "ECO-50", "status": "Done"}
+
+
+# ── isolation: the CLI guard refuses a cross-project jira action (defense in depth) ──
+
+def test_cli_create_blocks_cross_project(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: {"repo": "o/emkeel", "project_key": "KEEL", "root": "."})
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+    called = {"n": 0}
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (called.update(n=1), (True, "ECO-9"))[1])
+    assert J.main(["create", "--project", "ECO", "--summary", "x"]) == 1      # KEEL repo → ECO refused
+    assert "isolation" in capsys.readouterr().err and called["n"] == 0        # never reached create
+    # its own project is fine
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "KEEL-9"))
+    assert J.main(["create", "--project", "KEEL", "--summary", "x"]) == 0
+
+
+def test_cli_transition_blocks_cross_project(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: {"repo": "o/emkeel", "project_key": "KEEL", "root": "."})
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setenv("EMKEEL_BRANCH", "feat/ECO-7-x")
+    monkeypatch.setattr(J, "transition_issue", lambda *a, **k: (_ for _ in ()).throw(AssertionError("called")))
+    assert J.main([]) == 1                                                    # ECO-7 in a KEEL repo → refused
+    assert "isolation" in capsys.readouterr().err

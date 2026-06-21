@@ -1,14 +1,69 @@
 """Tests for emkeel init. Born with main() coverage (KEEL-2 lesson)."""
 
+import json
 from pathlib import Path
 
-from emkeel.init import APPEND_LINES, Config, apply, connection_checklist, main, plan
+from emkeel.init import (
+    APPEND_LINES,
+    Config,
+    _settings_with_guard,
+    apply,
+    connection_checklist,
+    main,
+    plan,
+)
 
 CFG = Config(jira_url="https://x.atlassian.net", jira_project="DEMO", github_repo="o/r")
 
 
 def _kinds(actions):
     return {a.path: a.kind for a in actions}
+
+
+# ── isolation hook distribution: merge into .claude/settings.json without clobbering (KEEL-90) ──
+
+def test_settings_merge_creates_when_absent():
+    out = json.loads(_settings_with_guard(None))
+    matchers = [e["matcher"] for e in out["hooks"]["PreToolUse"]]
+    assert "Bash" in matchers and "Edit|Write" in matchers
+    assert any(h["command"] == "emkeel guard" for e in out["hooks"]["PreToolUse"] for h in e["hooks"])
+
+
+def test_settings_merge_preserves_existing_content():
+    existing = json.dumps({"model": "opus", "hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": "my-own-hook"}]}]}})
+    out = json.loads(_settings_with_guard(existing))
+    assert out["model"] == "opus"                                  # untouched
+    cmds = [h["command"] for e in out["hooks"]["PreToolUse"] for h in e["hooks"]]
+    assert "my-own-hook" in cmds and "emkeel guard" in cmds        # both present, not clobbered
+
+
+def test_settings_merge_is_idempotent():
+    once = _settings_with_guard(None)
+    assert _settings_with_guard(once) is None                     # already wired → no change
+
+
+def test_settings_merge_unparseable_is_left_untouched():
+    assert _settings_with_guard("{ not json") is None             # never clobber a user's file
+
+
+def test_apply_merges_settings_and_managed_path(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    s = json.loads((tmp_path / ".claude/settings.json").read_text())
+    assert any(h["command"] == "emkeel guard" for e in s["hooks"]["PreToolUse"] for h in e["hooks"])
+    # the maint lane may touch the merged settings file
+    from emkeel.gates.check_maint_scope import managed_paths
+    assert ".claude/settings.json" in managed_paths()
+
+
+def test_apply_merge_does_not_clobber_user_settings(tmp_path):
+    sp = tmp_path / ".claude/settings.json"
+    sp.parent.mkdir(parents=True)
+    sp.write_text(json.dumps({"permissions": {"deny": ["Bash(rm:*)"]}}))
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    s = json.loads(sp.read_text())
+    assert s["permissions"] == {"deny": ["Bash(rm:*)"]}           # user content preserved
+    assert any(h["command"] == "emkeel guard" for e in s["hooks"]["PreToolUse"] for h in e["hooks"])
 
 
 def test_plan_on_empty_target_creates_everything(tmp_path):

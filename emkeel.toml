@@ -1,0 +1,14 @@
+# Emkeel config (non-secret). Real credentials go in .env / GitHub Secrets.
+# emkeel governs ITSELF: this declares emkeel's window identity so the per-repo isolation
+# guard (`emkeel guard`, the PreToolUse hook) and the CLI cross-repo guards work HERE — the
+# very window an agent used to reach into em-ecosystem (ECO ticket + cross-repo PR).
+[jira]
+base_url = "https://emillionnetworking-ltd-labs.atlassian.net"
+project_key = "KEEL"
+
+[github]
+repo = "emillionnetworking-ltd-labs/emkeel"
+
+[emkeel]
+source = "emkeel"
+generated_with = "0.1.76"   # the Emkeel version that wrote this wiring (emkeel doctor checks it)

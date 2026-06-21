@@ -79,19 +79,30 @@ def wiring_drift(target: Path) -> list[str]:
         return []
     import subprocess
 
-    from emkeel.init import _files
+    from emkeel.init import MERGE_FILES, _files
     default = _origin_default(target)
+
+    def _origin_or_local(path: str) -> str | None:
+        if default:
+            r = subprocess.run(["git", "-C", str(target), "show", f"origin/{default}:{path}"],
+                               capture_output=True, text=True)
+            return r.stdout if r.returncode == 0 else None
+        p = target / path
+        return p.read_text(encoding="utf-8") if p.is_file() else None
+
     drift = []
     for path, content in _files(cfg).items():
         if path == "emkeel.toml":
             continue
+        committed = _origin_or_local(path)
         if default:
-            r = subprocess.run(["git", "-C", str(target), "show", f"origin/{default}:{path}"],
-                               capture_output=True, text=True)
-            committed = r.stdout if r.returncode == 0 else ""   # missing on origin → counts as drift
-            if committed != content:
+            if (committed or "") != content:
                 drift.append(path)
-        elif (target / path).is_file() and (target / path).read_text(encoding="utf-8") != content:
+        elif committed is not None and committed != content:
+            drift.append(path)
+    # Merge files (e.g. .claude/settings.json) drift when the emkeel hook isn't wired in yet.
+    for path, fn in MERGE_FILES.items():
+        if fn(_origin_or_local(path)) is not None:        # would inject → not present → drift
             drift.append(path)
     return drift
 
@@ -110,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         return ship_update(target)
 
     # --no-ship: refresh the LOCAL working tree (you commit it yourself).
-    from emkeel.init import APPEND_LINES, _files
+    from emkeel.init import APPEND_LINES, MERGE_FILES, _files
     results: list[tuple[str, str]] = []   # (status, path) — status: created|updated|appended|unchanged
     for path, content in _files(cfg).items():
         p = target / path
@@ -131,6 +142,15 @@ def main(argv: list[str] | None = None) -> int:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(prev + sep + line + "\n", encoding="utf-8")
         results.append(("appended", path))
+    for path, fn in MERGE_FILES.items():
+        p = target / path
+        merged = fn(p.read_text(encoding="utf-8") if p.is_file() else None)
+        if merged is None:
+            results.append(("unchanged", path))
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(merged, encoding="utf-8")
+        results.append(("merged", path))
 
     changed = [(s, p) for s, p in results if s != "unchanged"]
     if not changed:
