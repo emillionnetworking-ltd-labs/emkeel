@@ -20,7 +20,19 @@ import urllib.error
 import urllib.request
 
 from emkeel.gates.check_ticket_link import find_ticket_key
+from emkeel.isolation import find_identity
 from emkeel.lanes import is_dependabot_lane, is_maint_lane
+
+
+def _isolation_block_project(project: str) -> str | None:
+    """Defense in depth (mirrors the PreToolUse guard): refuse a Jira project that isn't THIS repo's
+    declared `project_key`, even when the CLI is called directly. None = allowed. Fail-safe: ungoverned
+    repo (no emkeel.toml) → no enforcement."""
+    ident = find_identity(".")
+    if ident and ident.get("project_key") and project and project != ident["project_key"]:
+        return (f"emkeel isolation: this repo's Jira project is '{ident['project_key']}', "
+                f"refusing to act on project '{project}' (cross-repo).")
+    return None
 
 
 def secrets_present() -> bool:
@@ -144,6 +156,10 @@ def _main_create(rest: list[str]) -> int:
     ap.add_argument("--description", default="")
     ap.add_argument("--status", default=None, help="optionally transition the new issue to this status")
     ns = ap.parse_args(rest)
+    blocked = _isolation_block_project(ns.project)
+    if blocked:
+        print(f"::error::{blocked}", file=sys.stderr)
+        return 1
     if not secrets_present():
         print("::error::Cannot create a Jira issue — JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN not set.",
               file=sys.stderr)
@@ -176,6 +192,11 @@ def _main_transition(argv: list[str]) -> int:
         print("OK: dependabot lane — no ticket to transition.")
         return 0
     key = ns.key or find_ticket_key(branch, os.environ.get("EMKEEL_PR_TITLE", ""))
+    if key:
+        blocked = _isolation_block_project(key.split("-")[0])
+        if blocked:
+            print(f"::error::{blocked}", file=sys.stderr)
+            return 1
     if not key:
         print("no ticket key (set EMKEEL_BRANCH/EMKEEL_PR_TITLE or pass KEY)", file=sys.stderr)
         return 1

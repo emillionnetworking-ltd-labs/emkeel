@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import sys
 
-_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|jira|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|jira|guard|version> [args]   (try: emkeel setup)"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "jira":
         from emkeel.jira import main as jira_main
         return jira_main(rest)
+    if cmd == "guard":
+        from emkeel.isolation import main as guard_main
+        return guard_main(rest)
     if cmd in ("version", "--version", "-V"):
         from emkeel.version import main as version_main
         return version_main(rest)

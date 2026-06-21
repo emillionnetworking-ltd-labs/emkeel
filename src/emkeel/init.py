@@ -71,6 +71,57 @@ APPEND_LINES = {
     ".gitignore": ".env",
 }
 
+_GUARD_CMD = "emkeel guard"
+
+
+def _guard_hook_block() -> list[dict]:
+    """The emkeel isolation PreToolUse hooks: every Bash + Edit/Write call is screened by `emkeel guard`,
+    which DENIES only unambiguous cross-repo actions (see emkeel.isolation)."""
+    return [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": _GUARD_CMD}]},
+        {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": _GUARD_CMD}]},
+    ]
+
+
+def _has_guard(pre) -> bool:
+    for entry in pre if isinstance(pre, list) else []:
+        for h in (entry.get("hooks", []) if isinstance(entry, dict) else []):
+            cmd = (h.get("command", "") if isinstance(h, dict) else "") or ""
+            if "emkeel guard" in cmd or "emkeel.isolation" in cmd:
+                return True
+    return False
+
+
+def _settings_with_guard(existing: str | None) -> str | None:
+    """Merge the emkeel isolation hook into a `.claude/settings.json` WITHOUT clobbering existing content.
+
+    Returns the new JSON text, or None to LEAVE THE FILE UNTOUCHED — when the guard is already wired
+    (idempotent) or the existing file is unparseable (never destroy a user's settings). This is the merge
+    mechanism (a JSON-aware sibling of APPEND_LINES): emkeel injects only its hook entry, preserving the
+    rest of the repo's own settings."""
+    import json
+    if existing is None or not existing.strip():
+        data: dict = {}
+    else:
+        try:
+            data = json.loads(existing)
+        except (json.JSONDecodeError, ValueError):
+            return None                                   # unparseable → don't clobber
+    if not isinstance(data, dict):
+        return None
+    hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return None
+    pre = hooks.setdefault("PreToolUse", [])
+    if not isinstance(pre, list) or _has_guard(pre):
+        return None                                       # already wired → idempotent no-op
+    pre.extend(_guard_hook_block())
+    return json.dumps(data, indent=2) + "\n"
+
+
+# Files emkeel MERGES into (JSON-aware, never clobbering): {path: merge_fn(existing|None)->new|None}.
+MERGE_FILES = {".claude/settings.json": _settings_with_guard}
+
 
 def plan(target: Path, cfg: Config, force: bool) -> list[Action]:
     actions: list[Action] = []
@@ -81,6 +132,10 @@ def plan(target: Path, cfg: Config, force: bool) -> list[Action]:
         p = target / rel
         present = p.exists() and line in p.read_text(encoding="utf-8").splitlines()
         actions.append(Action(rel, "append-skip" if present else "append"))
+    for rel, fn in MERGE_FILES.items():
+        p = target / rel
+        merged = fn(p.read_text(encoding="utf-8") if p.exists() else None)
+        actions.append(Action(rel, "merge-skip" if merged is None else "merge"))
     return actions
 
 
@@ -99,6 +154,11 @@ def apply(target: Path, cfg: Config, force: bool, dry_run: bool) -> list[Action]
             prev = p.read_text(encoding="utf-8") if p.exists() else ""
             sep = "" if (prev == "" or prev.endswith("\n")) else "\n"
             p.write_text(prev + sep + APPEND_LINES[a.path] + "\n", encoding="utf-8")
+        elif a.kind == "merge":
+            p.parent.mkdir(parents=True, exist_ok=True)
+            merged = MERGE_FILES[a.path](p.read_text(encoding="utf-8") if p.exists() else None)
+            if merged is not None:                        # None = nothing to do / don't clobber
+                p.write_text(merged, encoding="utf-8")
     return actions
 
 

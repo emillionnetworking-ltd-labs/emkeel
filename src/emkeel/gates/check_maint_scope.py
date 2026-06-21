@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-from emkeel.init import APPEND_LINES, Config, _files
+from emkeel.init import APPEND_LINES, MERGE_FILES, Config, _files
 from emkeel.lanes import is_maint_lane
 
 
@@ -23,7 +23,7 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 
 def managed_paths() -> set[str]:
     """The set of paths Emkeel owns (static — independent of config values)."""
-    return set(_files(Config()).keys()) | set(APPEND_LINES.keys())
+    return set(_files(Config()).keys()) | set(APPEND_LINES.keys()) | set(MERGE_FILES.keys())
 
 
 def changed_files(base: str, run=_run) -> list[str]:
