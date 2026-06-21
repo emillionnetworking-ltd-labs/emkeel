@@ -39,16 +39,20 @@ def wiring_nudge(target: Path = Path(".")) -> str | None:
         if not (target / "emkeel.toml").is_file():
             return None
         from emkeel import __version__
+        from emkeel.init import is_self_repo
         from emkeel.version import _parse
         lines: list[str] = []
-        gw = _generated_with(target)
-        stale = bool(gw and _parse(gw) < _parse(__version__))   # cheap stamp check (the upgrade signal)
-        if not stale:                                            # only pay for the git diff if the stamp matches
-            try:
-                from emkeel.update import wiring_drift
-                stale = bool(wiring_drift(target))
-            except Exception:
-                stale = False
+        # emkeel's OWN repo manages its bespoke wiring — the stamp/distributed-drift signal doesn't apply.
+        stale = False
+        if not is_self_repo(target):
+            gw = _generated_with(target)
+            stale = bool(gw and _parse(gw) < _parse(__version__))   # cheap stamp check (the upgrade signal)
+            if not stale:                                           # only pay for the git diff if the stamp matches
+                try:
+                    from emkeel.update import wiring_drift
+                    stale = bool(wiring_drift(target))
+                except Exception:
+                    stale = False
         if stale:
             lines.append("⚠ emkeel: wiring desactualizado / wiring out of date → corre / run: emkeel update")
         if not _env_has_token(target):
@@ -181,8 +185,14 @@ def report_lines(st: dict) -> list[str]:
     if extra_declared and not extra_missing and po is not None:
         out.append(f"  ✓ required checks enforced: {', '.join(extra_declared)}")
     pending = [k for k in ("secrets_ok", "protection_ok") if not st.get(k)] + extra_missing
+    # A ⚠ already printed above (wiring drift, or a missing scoped credential) IS pending work — so
+    # "All set ✓" can't claim everything is done while a ⚠ is on screen (KEEL-95: fix the contradiction).
+    if st.get("governed") and st.get("drift") and not st.get("maint_pr"):
+        pending.append("drift")
+    if st.get("governed") and st.get("env_scoped_ok") is False:
+        pending.append("env")
     out.append("")
-    out.append("  All set ✓" if not pending else f"  {len(pending)} step(s) pending — see ✗ above.")
+    out.append("  All set ✓" if not pending else f"  {len(pending)} step(s) pending — see ⚠/✗ above.")
     return out
 
 

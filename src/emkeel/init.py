@@ -125,6 +125,35 @@ def _settings_with_guard(existing: str | None) -> str | None:
 # Files emkeel MERGES into (JSON-aware, never clobbering): {path: merge_fn(existing|None)->new|None}.
 MERGE_FILES = {".claude/settings.json": _settings_with_guard}
 
+# The DISTRIBUTED wiring templates a CONSUMER gets but emkeel's OWN repo does NOT use — emkeel has bespoke
+# CI/docs (ci.yml/release.yml, its CLAUDE.md is the framework contract). Exempt only in the emkeel repo.
+SELF_EXEMPT_WIRING = (
+    ".github/workflows/emkeel-ci.yml",
+    ".github/workflows/jira-transition.yml",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".claude/skills/strategy/SKILL.md",
+)
+
+
+def is_self_repo(target) -> bool:
+    """True if `target` IS the emkeel package repo itself (not a consumer). Then the distributed wiring
+    templates above don't apply. Detected by an explicit `self = true` marker in emkeel.toml, OR robustly
+    by the repo shipping the emkeel package (pyproject `name = "emkeel"`). A generated consumer emkeel.toml
+    has neither (`_toml()` never writes `self`), so consumers are unaffected."""
+    import re as _re
+    from pathlib import Path as _Path
+    target = _Path(target)
+    toml = target / "emkeel.toml"
+    if toml.is_file() and _re.search(r'(?mi)^\s*self\s*=\s*true\b',
+                                     toml.read_text(encoding="utf-8", errors="replace")):
+        return True
+    pp = target / "pyproject.toml"
+    if pp.is_file() and _re.search(r'(?m)^\s*name\s*=\s*"emkeel"\s*$',
+                                   pp.read_text(encoding="utf-8", errors="replace")):
+        return True
+    return False
+
 
 def plan(target: Path, cfg: Config, force: bool) -> list[Action]:
     actions: list[Action] = []
