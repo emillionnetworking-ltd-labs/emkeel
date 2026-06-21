@@ -19,7 +19,7 @@ agent — far worse than the leak. So it must deny ONLY unambiguous crossings an
 
 ## Decision
 
-Three layers, all in emkeel (inherited via `pip install emkeel`):
+Three layers, all in emkeel (inherited via `pipx install emkeel` — see *Installation / activation* below):
 
 1. **A PreToolUse hook → `emkeel guard`** (`src/emkeel/isolation.py`). Claude Code calls it before every
    `Bash` and `Edit`/`Write`; it reads this repo's identity from `emkeel.toml` and the pure function
@@ -45,6 +45,19 @@ Three layers, all in emkeel (inherited via `pip install emkeel`):
    repo's `project_key`, even when the CLI is called directly (not via the hook). And **emkeel now governs
    itself** — it ships its own `emkeel.toml` (`project_key = KEEL`, `repo = …/emkeel`), closing the exact
    window the agent crossed through.
+
+## Installation / activation (pipx — never `pip`)
+
+emkeel is a global CLI installed with **pipx**, in two scenarios:
+
+- **From scratch (first time):** `pipx install emkeel` → `emkeel init` — scaffolds the repo's wiring,
+  including `.claude/settings.json` (the hook) + `emkeel.toml`.
+- **Already governed (activate the guard on an existing repo):** `pipx upgrade emkeel` — the CLI gains the
+  `emkeel guard` command — → `emkeel update` — refreshes the wiring, merging `.claude/settings.json` via
+  `MERGE_FILES`.
+
+Both paths funnel through the same `init.apply()` manifest, so they install identically; `emkeel doctor`
+(`wiring_drift`) verifies a repo matches the canonical wiring.
 
 ## Consequences
 
