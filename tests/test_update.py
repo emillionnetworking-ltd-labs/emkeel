@@ -159,6 +159,29 @@ def test_update_ships_by_default(tmp_path, monkeypatch):
     assert calls                                          # ships (worktree) with no flag
 
 
+def test_update_hands_off_to_connect_when_cred_pending(tmp_path, monkeypatch, capsys):
+    # KEEL-94: after a successful update, if the scoped credential is missing → tell the user the next step.
+    apply(tmp_path, CFG, force=False, dry_run=False)       # no .env written by init
+    monkeypatch.chdir(tmp_path)
+    import emkeel.ship as shipmod
+    monkeypatch.setattr(shipmod, "ship_update", lambda target=None: 0)
+    from emkeel.update import main as update_main
+    assert update_main([]) == 0
+    out = capsys.readouterr().out
+    assert "emkeel connect" in out and "GH_TOKEN" in out   # handoff names the command AND the variable
+
+
+def test_update_no_handoff_when_cred_present(tmp_path, monkeypatch, capsys):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / ".env").write_text("GH_TOKEN=github_pat_x\n")
+    monkeypatch.chdir(tmp_path)
+    import emkeel.ship as shipmod
+    monkeypatch.setattr(shipmod, "ship_update", lambda target=None: 0)
+    from emkeel.update import main as update_main
+    assert update_main([]) == 0
+    assert "emkeel connect" not in capsys.readouterr().out  # nothing pending → no handoff
+
+
 def test_update_no_ship_leaves_pending(tmp_path, monkeypatch, capsys):
     apply(tmp_path, CFG, force=False, dry_run=False)
     (tmp_path / "AGENTS.md").write_text("stale")

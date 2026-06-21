@@ -77,6 +77,13 @@ T: dict[str, dict[str, str]] = {
                    "en": "     Create it manually:  gh repo create {repo} --private --source=. --push\n     Then re-run:  emkeel connect"},
     "q_protect": {"es": "  ¿Exigir el check 'gates' + PRs en '{branch}'? [S/n] ",
                   "en": "  Require the 'gates' check + PRs on '{branch}'? [Y/n] "},
+    "protect_on":{"es": "  branch protection en '{branch}': ya activada ✓", "en": "  branch protection on '{branch}': already on ✓"},
+    "q_protect_change":{"es": "  ¿Re-aplicarla / cambiarla? [s/N] ", "en": "  Re-apply / change it? [y/N] "},
+    "secrets_on":{"es": "  Jira secrets (CI): ya seteados ✓", "en": "  Jira secrets (CI): already set ✓"},
+    "q_secrets_change":{"es": "  ¿Re-configurarlos? [s/N] ", "en": "  Reconfigure them? [y/N] "},
+    "env_off":   {"es": "  credencial local (.env GH_TOKEN): falta ✗", "en": "  local credential (.env GH_TOKEN): missing ✗"},
+    "env_on":    {"es": "  credencial local (.env GH_TOKEN): ya configurada ✓", "en": "  local credential (.env GH_TOKEN): already configured ✓"},
+    "q_local_change":{"es": "  ¿Re-escribir el .env scopeado? [s/N] ", "en": "  Rewrite the scoped .env? [y/N] "},
     "ok_protect":{"es": "  ✓ branch protection activada", "en": "  ✓ branch protection on"},
     "fail_protect":{"es": "  ✗ {msg}\n     (¿necesitas permisos de admin? hazlo por la web)",
                     "en": "  ✗ {msg}\n     (need admin rights? do it via the web link)"},
@@ -198,6 +205,24 @@ def do_secret(repo: str, name: str, value: str, run=_run):
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
+def protection_exists(repo: str, branch: str, run=_run) -> bool:
+    """True if branch protection is ALREADY configured on `branch` (so connect can say so + only ask to
+    change it). Best-effort: any gh failure → False (offer to set it, the safe default)."""
+    return run(["gh", "api", f"repos/{repo}/branches/{branch}/protection", "--silent"]).returncode == 0
+
+
+def secrets_exist(repo: str, run=_run) -> bool:
+    """True if the Jira secrets look already set (JIRA_TOKEN present in `gh secret list`)."""
+    r = run(["gh", "secret", "list", "--repo", repo])
+    return r.returncode == 0 and "JIRA_TOKEN" in (r.stdout or "")
+
+
+def env_scoped_present(target: Path) -> bool:
+    """True if the scoped local credential (.env with GH_TOKEN) is already written."""
+    envp = target / ".env"
+    return envp.is_file() and "GH_TOKEN" in envp.read_text(encoding="utf-8", errors="replace")
+
+
 def _jira_fetch(base_url: str, email: str, token: str) -> tuple[bool, str]:
     import base64 as _b64
     import json as _json
@@ -302,15 +327,25 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
                 print(t(T, "fail_create", lang).format(repo=repo))
                 return 1
 
-    # 2) Branch protection — require the gates check + PRs
-    if is_yes(inp(t(T, "q_protect", lang).format(branch=branch))):
+    # 2) Branch protection — show current state, only ask to CHANGE if it's already on.
+    if protection_exists(repo, branch, run):
+        print(t(T, "protect_on", lang).format(branch=branch))
+        do_it = is_yes(inp(t(T, "q_protect_change", lang)))
+    else:
+        do_it = is_yes(inp(t(T, "q_protect", lang).format(branch=branch)))
+    if do_it:
         with spin(t(T, "w_protect", lang)):
             ok, msg = do_protect(repo, branch, run)
         print(t(T, "ok_protect", lang) if ok else t(T, "fail_protect", lang).format(msg=msg))
 
-    # 3) Secrets — token via hidden prompt; verified before saving; never in chat/logs
+    # 3) Secrets — token via hidden prompt; verified before saving; never in chat/logs.
     email = token = ""          # also reused below for the per-repo .env (scoped local credential)
-    if is_yes(inp(t(T, "q_secrets", lang))):
+    if secrets_exist(repo, run):
+        print(t(T, "secrets_on", lang))
+        want_secrets = is_yes(inp(t(T, "q_secrets_change", lang)))
+    else:
+        want_secrets = is_yes(inp(t(T, "q_secrets", lang)))
+    if want_secrets:
         print(t(T, "tok_first", lang).format(link=TOKEN_LINK))
         while True:
             email = inp(t(T, "email_q", lang)).strip()
@@ -335,7 +370,13 @@ def main(argv=None, inp=input, getpass=_getpass.getpass, run=_run, lang=None) ->
     # 3b) Scoped LOCAL credential — a fine-grained GitHub PAT for THIS repo, written to .env (600).
     # This is the per-window isolation: the agent's gh/git in this repo uses a token that can't touch
     # another repo. The PAT is pasted HIDDEN (never via chat); .env is gitignored + chmod 600.
-    if is_yes(inp(t(T, "q_local", lang))):
+    if env_scoped_present(Path(".")):
+        print(t(T, "env_on", lang))
+        want_local = is_yes(inp(t(T, "q_local_change", lang)))
+    else:
+        print(t(T, "env_off", lang))
+        want_local = is_yes(inp(t(T, "q_local", lang)))
+    if want_local:
         print(t(T, "pat_guide", lang).format(repo=repo, link=PAT_LINK))
         pat = getpass(t(T, "pat_q", lang)).strip()
         env_vals: dict[str, str] = {}

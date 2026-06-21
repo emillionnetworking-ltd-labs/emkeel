@@ -17,9 +17,28 @@ Subcommands:
 
 from __future__ import annotations
 
+import os
 import sys
 
 _USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|jira|guard|version> [args]   (try: emkeel setup)"
+
+# Commands that already speak to wiring/cred state (don't double-nudge) or run hot (guard = every tool call).
+_NO_NUDGE = {"doctor", "update", "connect", "guard", "version", "--version", "-V", "-h", "--help"}
+
+
+def _maybe_nudge(cmd: str) -> None:
+    """Proactive, cheap, FAIL-SAFE 'git-hint' to stderr: if the repo wiring is behind the CLI or the
+    scoped credential is missing, point at `emkeel update` / `emkeel connect`. Never blocks/raises; no
+    network; honored off via EMKEEL_NO_UPDATE_CHECK; silent for the commands that already report state."""
+    if cmd in _NO_NUDGE or os.environ.get("EMKEEL_NO_UPDATE_CHECK"):
+        return
+    try:
+        from emkeel.doctor import wiring_nudge
+        msg = wiring_nudge()
+        if msg:
+            print(msg, file=sys.stderr)
+    except Exception:
+        pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         print(_USAGE)
         return 0
     cmd, rest = argv[0], argv[1:]
+    _maybe_nudge(cmd)
     if cmd == "setup":
         from emkeel.wizard import main as wizard_main
         return wizard_main(rest)
