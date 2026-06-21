@@ -22,6 +22,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
+from urllib.parse import urlparse
 
 ALLOW: tuple[str, str] = ("allow", "")
 
@@ -47,9 +48,12 @@ def find_identity(cwd: str | os.PathLike) -> dict | None:
                 data = tomllib.loads(toml.read_text(encoding="utf-8"))
             except (tomllib.TOMLDecodeError, OSError):
                 return None
+            jira = data.get("jira", {}) or {}
+            base = jira.get("base_url", "") or ""
             return {
                 "repo": (data.get("github", {}) or {}).get("repo", "") or "",
-                "project_key": (data.get("jira", {}) or {}).get("project_key", "") or "",
+                "project_key": jira.get("project_key", "") or "",
+                "jira_host": (urlparse(base).netloc if base else ""),   # for raw-API detection (KEEL-92)
                 "root": str(d),
             }
     return None
@@ -100,6 +104,29 @@ def _is_protected_path(path_str: str) -> bool:
     return bool(_PROTECTED_RE.search(norm)) or norm in (".claude/settings.json", "emkeel.toml")
 
 
+# ---------- raw-API detection (KEEL-92): a curl/python straight to Jira/GitHub bypasses gh/emkeel ----------
+
+def _is_jira_api(cmd: str, jira_host: str) -> bool:
+    """True if the command looks like a call to the Jira REST API (this repo's host, any atlassian.net,
+    or a `/rest/api/<ver>/` path)."""
+    if jira_host and jira_host in cmd:
+        return True
+    return "atlassian.net" in cmd or bool(re.search(r"/rest/api/\w+/", cmd))
+
+
+def _jira_project_keys(cmd: str) -> set[str]:
+    """Project keys referenced in a Jira-API command, across the create/JQL/transition forms:
+    `"project":{"key":"ECO"}`, `project=ECO`, a bare `"key":"ECO"`, and an issue key in `/issue/ECO-7`
+    (→ project ECO). Issue keys (`ECO-7`) are reduced to their project prefix; never a false match on one."""
+    q = r"[\"']"   # JSON (") and python-dict (') quoting both occur in raw API commands
+    keys: set[str] = set()
+    keys.update(re.findall(rf'{q}project{q}\s*:\s*\{{\s*{q}key{q}\s*:\s*{q}([A-Z][A-Z0-9]+){q}', cmd))
+    keys.update(re.findall(r'\bproject\s*[=:]\s*"?\'?([A-Z][A-Z0-9]+)(?!-?\d)', cmd))
+    keys.update(re.findall(rf'{q}key{q}\s*:\s*{q}([A-Z][A-Z0-9]+){q}', cmd))    # bare project key (ECO-7 won't match: -7 before quote)
+    keys.update(re.findall(r'/issue/([A-Z][A-Z0-9]+)-\d+', cmd))               # transition/get a foreign issue
+    return keys
+
+
 # ---------- the decision (pure) ----------
 
 def _decide_bash(cmd: str, cwd: str, ident: dict) -> tuple[str, str]:
@@ -126,6 +153,19 @@ def _decide_bash(cmd: str, cwd: str, ident: dict) -> tuple[str, str]:
             if _crosses_repo(u, repo):
                 return ("deny", f"emkeel isolation: refusing git push to a different repo "
                                 f"({_norm_repo(u)}); this window is '{repo}'.")
+
+    # RAW Jira API (curl/python straight to the REST API) targeting a DIFFERENT project
+    if proj and _is_jira_api(cmd, ident.get("jira_host", "")):
+        foreign = sorted(k for k in _jira_project_keys(cmd) if k != proj)
+        if foreign:
+            return ("deny", f"emkeel isolation: this is the '{proj}' Jira project — refusing a raw Jira "
+                            f"API call targeting project {', '.join(foreign)}.")
+
+    # RAW GitHub API (api.github.com/repos/<owner>/<repo>) targeting a DIFFERENT repo
+    for m in re.finditer(r"api\.github\.com/repos/([\w.\-]+/[\w.\-]+)", cmd):
+        if _crosses_repo(m.group(1), repo):
+            return ("deny", f"emkeel isolation: this is the '{repo}' window — refusing a raw GitHub API "
+                            f"call targeting a different repo ({_norm_repo(m.group(1))}).")
 
     # cd into a SIBLING repo (cd ../other-repo, cd /abs/projects/other)
     for seg in re.split(r"&&|\|\||[;|]", cmd):
