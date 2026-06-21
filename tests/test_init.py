@@ -5,10 +5,12 @@ from pathlib import Path
 
 from emkeel.init import (
     APPEND_LINES,
+    SELF_EXEMPT_WIRING,
     Config,
     _settings_with_guard,
     apply,
     connection_checklist,
+    is_self_repo,
     main,
     plan,
 )
@@ -262,3 +264,54 @@ def test_agents_md_mentions_docs_convention(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     agents = (tmp_path / "AGENTS.md").read_text()
     assert "product reference" in agents and "docs/archive/" in agents
+
+
+# ── self-repo: apply() must EXEMPT the distributed wiring it doesn't use (KEEL-96) ──
+# The KEEL-95 bug: wiring_drift (detection) exempted these, but apply (action) still wrote them
+# → `emkeel update` clobbered emkeel's own main. The fix makes BOTH consult is_self_repo + SELF_EXEMPT_WIRING.
+
+def _make_self(tmp_path):
+    """A repo that auto-detects as emkeel (ships the package: pyproject name=emkeel)."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "emkeel"\nversion = "9.9.9"\n')
+
+
+def test_apply_self_repo_does_not_write_exempt_wiring(tmp_path):
+    _make_self(tmp_path)
+    bespoke = {rel: f"BESPOKE {rel}\n" for rel in SELF_EXEMPT_WIRING}
+    for rel, body in bespoke.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(body)
+    apply(tmp_path, CFG, force=True, dry_run=False)              # force = the `emkeel update` action
+    for rel, body in bespoke.items():
+        assert (tmp_path / rel).read_text() == body, f"apply clobbered {rel} in the self-repo"
+
+
+def test_consumer_apply_writes_distributed_wiring(tmp_path):
+    # baseline: a normal consumer (no emkeel package) DOES get the distributed wiring — unchanged.
+    apply(tmp_path, CFG, force=True, dry_run=False)
+    assert (tmp_path / "AGENTS.md").read_text().startswith("# AGENTS.md")
+    assert (tmp_path / ".github/workflows/emkeel-ci.yml").is_file()
+
+
+def test_detection_equals_action_lock_in_self_repo(tmp_path):
+    # THE REGRESSION LOCK: the set apply SKIPS for self == the set wiring_drift EXEMPTS for self.
+    # If one logic changes without the other, this fails — the KEEL-95 divergence can't recur.
+    _make_self(tmp_path)
+    apply(tmp_path, CFG, force=False, dry_run=False)            # scaffold once (writes pyproject-less files…)
+    _make_self(tmp_path)                                        # …then mark self
+    skipped_by_apply = {a.path for a in plan(tmp_path, CFG, force=True) if a.kind == "skip-self"}
+    assert skipped_by_apply == set(SELF_EXEMPT_WIRING)
+    # and wiring_drift exempts exactly those: make each distributed file drift, none should be reported.
+    from emkeel.update import wiring_drift
+    for rel in SELF_EXEMPT_WIRING:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("drifted\n")
+    exempted_by_drift = set(SELF_EXEMPT_WIRING) - set(wiring_drift(tmp_path))
+    assert exempted_by_drift == set(SELF_EXEMPT_WIRING)         # detection == action
+
+
+def test_is_self_repo_autodetect_survives_toml_rewrite(tmp_path):
+    # robust: auto-detection (pyproject name=emkeel) is primary — survives a clobbered/rewritten emkeel.toml.
+    _make_self(tmp_path)
+    (tmp_path / "emkeel.toml").write_text('[github]\nrepo = "o/r"\n[emkeel]\ngenerated_with = "9.9.9"\n')  # no self marker
+    assert is_self_repo(tmp_path) is True                       # still self, via pyproject

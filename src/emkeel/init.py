@@ -157,7 +157,14 @@ def is_self_repo(target) -> bool:
 
 def plan(target: Path, cfg: Config, force: bool) -> list[Action]:
     actions: list[Action] = []
+    # SINGLE SOURCE OF TRUTH with wiring_drift: the ACTION (apply) exempts the SAME distributed wiring the
+    # DETECTION (wiring_drift) does for the emkeel repo itself — so `emkeel update` can NEVER overwrite
+    # emkeel's bespoke CI/docs (the KEEL-95 divergence that clobbered main; locked by a regression test).
+    self_repo = is_self_repo(target)
     for rel in _files(cfg):
+        if self_repo and rel in SELF_EXEMPT_WIRING:
+            actions.append(Action(rel, "skip-self"))      # emkeel's own bespoke file — never written
+            continue
         exists = (target / rel).exists()
         actions.append(Action(rel, "create" if (force or not exists) else "skip-exists"))
     for rel, line in APPEND_LINES.items():
