@@ -270,18 +270,132 @@ def _do_check(topic: str, target: Path, check_urls: bool = False) -> int:
     return 0 if ok else 1
 
 
+# ── /strategy as the first adopter of the generic governed-process engine ──────────────────────────
+#
+# The skill stops being "prose + an exit gate" and becomes a prereq-gated state machine: you cannot
+# reach `approved` without passing through every step in order, and each step's evidence is recorded.
+# The engine REFUSES to skip — so an obligatory step can't be silently omitted.
+
+def _researched_provenance(fields: dict) -> tuple[bool, str]:
+    """`researched` gate: research must cite provenance. ≥1 VERIFIABLE external source (a URL or a repo
+    file:line in `sources`) OR an explicit `internal_only=true`. Subsumes the research-provenance gap:
+    an agent can't claim 'researched' with no real source and no internal-only declaration."""
+    srcs = fields.get("sources") or []
+    if isinstance(srcs, str):
+        srcs = [srcs]
+    if any(classify_source(str(s)) in ("url", "repo") for s in srcs):
+        return True, ""
+    if fields.get("internal_only") is True:
+        return True, ""
+    return False, ("requires provenance — ≥1 external source (a URL or repo file:line) in `sources`, "
+                   "OR `internal_only=true` declared explicitly")
+
+
+def _check_passed(fields: dict) -> tuple[bool, str]:
+    """`checked` gate: the deterministic `emkeel strategy check` must have PASSED (recorded)."""
+    if fields.get("check_passed") is True:
+        return True, ""
+    return False, "requires `check_passed=true` (run `emkeel strategy check` and record its pass)"
+
+
+def strategy_process() -> "ProcessSchema":
+    """The /strategy process schema: scaffolded → researched → proposed → critiqued → checked →
+    presented(human gate shown) → approved(human gate recorded). Declared as data — the generic engine
+    in `emkeel.process` enforces the ordering + evidence; nothing here is engine-specific."""
+    from emkeel.process import ProcessSchema, Step
+    return ProcessSchema("strategy", (
+        Step("scaffolded", requires=("topic",)),
+        Step("researched", validate=_researched_provenance),
+        Step("proposed", requires=("options",)),          # ≥2 real options recorded
+        Step("critiqued", requires=("critique",)),        # adversarial pass recorded
+        Step("checked", requires=("check_passed",), validate=_check_passed),
+        Step("presented", requires=("presented_to",)),    # shown to the human (the gate)
+        Step("approved", requires=("approved_by",)),      # human decision recorded — the hard gate
+    ))
+
+
+def _process_path(target: Path, topic: str) -> Path:
+    return target / STRATEGY_DIR / f"{slug(topic)}.process.json"
+
+
+def _parse_value(raw: str):
+    """`k=v` value → bool/null/int/list/str (lists as [a,b,c]). Stdlib only, like the lifecycle's parser."""
+    low = raw.lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    if low == "null":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    if raw.startswith("[") and raw.endswith("]"):
+        inner = raw[1:-1].strip()
+        return [_parse_value(x.strip()) for x in inner.split(",")] if inner else []
+    return raw
+
+
+def _do_advance(step: str, topic: str, sets: list[str], target: Path) -> int:
+    from emkeel.process import PrereqError, advance_on_disk
+    schema = strategy_process()
+    if step not in schema.names():
+        print(f"unknown step '{step}'. Steps: {' → '.join(schema.names())}", file=sys.stderr)
+        return 2
+    fields = {}
+    for raw in sets:
+        if "=" not in raw:
+            print(f"--set expects key=value (got {raw!r})", file=sys.stderr)
+            return 2
+        k, _, v = raw.partition("=")
+        fields[k] = _parse_value(v)
+    try:
+        state = advance_on_disk(schema, _process_path(target, topic), step, fields=fields)
+    except PrereqError as e:
+        print(f"REFUSED: cannot advance '{slug(topic)}' to '{step}' — {e}", file=sys.stderr)
+        return 1
+    print(f"✓ {slug(topic)} → {state['state']}  (process: strategy)")
+    return 0
+
+
+def _do_status(topic: str, target: Path) -> int:
+    from emkeel.process import read_state, step_done
+    schema = strategy_process()
+    state = read_state(_process_path(target, topic))
+    if state is None:
+        print(f"  {slug(topic)}: process not started (no step recorded yet).")
+        return 0
+    print(f"  {slug(topic)} — process: strategy (current: {state.get('state') or '(none)'})")
+    for name in schema.names():
+        mark = "✓" if step_done(state, name) else "·"
+        print(f"    {mark} {name}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     target = Path(os.environ.get("EMKEEL_REPO_DIR", "."))
     sub = argv[0] if argv else ""
     rest = argv[1:]
+    positional = [a for a in rest if not a.startswith("-")]
     if sub == "new":
         return _do_new(rest[0] if rest else "", target)
     if sub == "check":
         check_urls = "--check-urls" in rest
-        positional = [a for a in rest if not a.startswith("-")]
         return _do_check(positional[0] if positional else "", target, check_urls=check_urls)
-    print("usage: emkeel strategy <new <topic> | check [topic] [--check-urls]>", file=sys.stderr)
+    if sub == "advance":
+        if not positional:
+            print("usage: emkeel strategy advance <step> <topic> [--set k=v ...]", file=sys.stderr)
+            return 2
+        step = positional[0]
+        topic = positional[1] if len(positional) > 1 else ""
+        sets = [a[len("--set="):] for a in rest if a.startswith("--set=")]
+        return _do_advance(step, topic, sets, target)
+    if sub == "status":
+        return _do_status(positional[0] if positional else "", target)
+    print("usage: emkeel strategy <new <topic> | check [topic] [--check-urls] | "
+          "advance <step> <topic> [--set k=v] | status <topic>>", file=sys.stderr)
     return 2
 
 
