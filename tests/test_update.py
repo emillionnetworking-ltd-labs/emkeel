@@ -72,6 +72,57 @@ def test_wiring_drift_ignores_toml_stamp(tmp_path):
     assert "emkeel.toml" not in wiring_drift(tmp_path)
 
 
+# ── distribution consistency: init (scratch) and update (refresh) deliver the SAME wiring (KEEL-91) ──
+
+def test_init_equals_update_managed_files_identical(tmp_path):
+    """Lock that the two delivery paths produce byte-identical wiring across ALL three manifests
+    (_files + APPEND_LINES + MERGE_FILES). Both funnel through apply(); this guards against future
+    divergence (e.g. if someone makes update's `mutate` stop calling apply)."""
+    from emkeel.init import APPEND_LINES, MERGE_FILES, _files
+
+    init_dir = tmp_path / "init"; init_dir.mkdir()
+    upd_dir = tmp_path / "upd"; upd_dir.mkdir()
+
+    apply(init_dir, CFG, force=False, dry_run=False)              # init: scaffold from scratch
+
+    apply(upd_dir, CFG, force=False, dry_run=False)              # update: an older adoption…
+    (upd_dir / "AGENTS.md").write_text("STALE contract\n")       # …that drifted
+    (upd_dir / "CLAUDE.md").write_text("STALE\n")
+    (upd_dir / ".github/workflows/emkeel-ci.yml").unlink()       # …with a missing file
+    (upd_dir / ".gitignore").write_text("node_modules\n")        # …and pre-existing user content
+    apply(upd_dir, CFG, force=True, dry_run=False)               # the update refresh (force apply)
+
+    # _files: emkeel owns the WHOLE file → byte-identical after both paths.
+    for rel in _files(CFG):
+        a, b = init_dir / rel, upd_dir / rel
+        assert a.is_file() and b.is_file(), f"missing {rel}"
+        assert a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8"), f"init vs update differ: {rel}"
+    # APPEND_LINES: emkeel owns only its LINE (user keeps the rest) → the line is present in both.
+    for rel, line in APPEND_LINES.items():
+        for d in (init_dir, upd_dir):
+            assert line in (d / rel).read_text(encoding="utf-8").splitlines(), f"{rel} missing {line!r}"
+    # MERGE_FILES: emkeel owns only its merged entries → already present in both (a re-merge is a no-op).
+    for rel, fn in MERGE_FILES.items():
+        for d in (init_dir, upd_dir):
+            assert fn((d / rel).read_text(encoding="utf-8")) is None, f"{rel} not fully merged"
+
+
+def test_wiring_drift_detects_missing_append_line(tmp_path):
+    # THE GAP: an append-manifest file (.gitignore/.gitattributes) missing its line is drift `update`
+    # would fix — but wiring_drift didn't check APPEND_LINES, so `emkeel doctor` stayed silent.
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    (tmp_path / ".gitignore").write_text("node_modules\n")       # the `.env` line is gone
+    assert ".gitignore" in wiring_drift(tmp_path)
+
+
+def test_wiring_drift_clean_when_append_lines_present(tmp_path):
+    from emkeel.update import wiring_drift
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    drift = wiring_drift(tmp_path)
+    assert ".gitignore" not in drift and ".gitattributes" not in drift   # lines present → no drift
+
+
 def test_update_noop_when_current(tmp_path, monkeypatch, capsys):
     apply(tmp_path, CFG, force=False, dry_run=False)
     monkeypatch.chdir(tmp_path)
