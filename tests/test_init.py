@@ -242,6 +242,23 @@ def test_ci_includes_strategy_change_gate(tmp_path):
     assert "check_strategy_change" in ci and "EMKEEL_BASE_REF" in ci
 
 
+def test_ci_includes_strategy_process_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    assert "check_strategy_process" in ci
+
+
+def test_strategy_skill_drives_the_engine(tmp_path):
+    # KEEL-100: the distributed skill must DRIVE the process engine, not just call new/check.
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    skill = (tmp_path / ".claude/skills/strategy/SKILL.md").read_text()
+    for step in ("scaffolded", "researched", "proposed", "critiqued", "checked", "presented", "approved"):
+        assert f"emkeel strategy advance {step}" in skill, step
+    assert "internal_only=true" in skill                       # explicit no-market declaration
+    assert "process.json" in skill                             # commit the state alongside the doc
+    assert "No web access" not in skill                        # the old escape hatch is gone
+
+
 def test_ci_includes_strategy_alignment_gate(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
