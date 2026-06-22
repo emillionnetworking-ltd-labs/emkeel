@@ -82,6 +82,13 @@ jobs:
           EMKEEL_BASE_REF: ${{ github.base_ref }}
         run: python -m emkeel.gates.check_strategy_change
 
+      # Gate: un cambio de strategy/<topic>.md exige su <topic>.process.json (pasos no salteables: >=checked + provenance).
+      - name: "Gate — strategy process (non-skippable steps)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_strategy_process
+
       # Gate: un feature que sirve a una estrategia debe ACUSAR su alineación (sección Alignment). Dormant si no hay estrategias.
       - name: "Gate — strategy alignment (feature acknowledges the north star)"
         if: github.event_name == 'pull_request'
