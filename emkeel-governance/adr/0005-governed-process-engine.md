@@ -57,3 +57,12 @@ separate research-provenance gate we were going to add; and `approved` requires 
   follow-on (the prose is a thin driver over the tested engine).
 - **Reuse, not reinvention**: the design mirrors `_state_machine.py` (schema state, pure `evaluate_prereq`,
   `_StateLock`, lib + CLI) — a known-good pattern, not a new one.
+
+## Update — decision completed (KEEL-100)
+
+The "follow-on" above is done: the **distributed** `/strategy` skill now drives the engine step by step
+(`emkeel strategy advance <step>`, recording evidence; `internal_only=true` declared explicitly when a
+topic has no market dimension), and a non-skippable CI gate **`check_strategy_process`** fails any PR that
+touches `strategy/<topic>.md` without a committed `<topic>.process.json` that reached `checked` with
+`researched` provenance. So `/strategy` is now mechanically non-skippable end-to-end (skill + engine +
+CI), not advisory prose. See KEEL-100.
