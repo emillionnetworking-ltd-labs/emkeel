@@ -18,6 +18,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from emkeel.gates.check_ticket_link import find_ticket_key
 from emkeel.isolation import find_identity
@@ -35,9 +36,42 @@ def _isolation_block_project(project: str) -> str | None:
     return None
 
 
+_JIRA_KEYS = ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN")
+
+
+def _scoped_env_values() -> dict[str, str]:
+    """Read the SCOPED `.env` of THIS repo (the one beside emkeel.toml) IN-PROCESS — so creds work even
+    when `direnv` isn't installed (the `.envrc` never loaded them into the shell). Strictly scoped: only
+    this repo's `.env` (via the isolation identity's root), never another repo's. Empty dict on no
+    identity / no file / parse error (fail-safe — never raises). Does NOT relax the isolation guard."""
+    try:
+        ident = find_identity(".")
+        if not ident or not ident.get("root"):
+            return {}
+        envp = Path(ident["root"]) / ".env"
+        if not envp.is_file():
+            return {}
+        out: dict[str, str] = {}
+        for ln in envp.read_text(encoding="utf-8", errors="replace").splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#") or "=" not in ln:
+                continue
+            k, _, v = ln.partition("=")
+            out[k.strip()] = v.strip().strip('"').strip("'")
+        return out
+    except Exception:
+        return {}
+
+
+def _creds() -> dict[str, str]:
+    """The Jira creds, env first, falling back to this repo's scoped `.env` (direnv-independent)."""
+    scoped = _scoped_env_values()
+    return {k: (os.environ.get(k) or scoped.get(k, "")) for k in _JIRA_KEYS}
+
+
 def secrets_present() -> bool:
-    """True if all the Jira secrets needed for the transition are set."""
-    return all(os.environ.get(k) for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"))
+    """True if all the Jira creds are available — from the environment OR this repo's scoped `.env`."""
+    return all(_creds().values())
 
 
 def pick_transition(transitions: list[dict], target: str) -> str | None:
@@ -72,11 +106,8 @@ def _http_caller(base_url: str, email: str, token: str):
 
 
 def _default_caller():
-    return _http_caller(
-        os.environ.get("JIRA_BASE_URL", ""),
-        os.environ.get("JIRA_EMAIL", ""),
-        os.environ.get("JIRA_TOKEN", ""),
-    )
+    c = _creds()                       # env first, then this repo's scoped .env (direnv-independent)
+    return _http_caller(c["JIRA_BASE_URL"], c["JIRA_EMAIL"], c["JIRA_TOKEN"])
 
 
 def issue_status(key: str, *, caller=None) -> int:
@@ -156,13 +187,17 @@ def _main_create(rest: list[str]) -> int:
     ap.add_argument("--description", default="")
     ap.add_argument("--status", default=None, help="optionally transition the new issue to this status")
     ns = ap.parse_args(rest)
+    # HARD, non-silent failures (like the guard): on a block or missing creds, error RED and STOP — the
+    # agent must NOT proceed to open a PR with no ticket.
     blocked = _isolation_block_project(ns.project)
     if blocked:
-        print(f"::error::{blocked}", file=sys.stderr)
+        print(f"::error::{blocked}\nSTOP: do not open a PR without a ticket — fix the project/window first.",
+              file=sys.stderr)
         return 1
     if not secrets_present():
-        print("::error::Cannot create a Jira issue — JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN not set.",
-              file=sys.stderr)
+        print("::error::Cannot create a Jira issue — no Jira creds in the environment or this repo's "
+              "scoped .env (JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN). Run `emkeel connect`.\n"
+              "STOP: do not open a PR without a ticket.", file=sys.stderr)
         return 1
     ok, res = create_issue(ns.project, ns.summary, ns.issuetype, ns.description)
     if not ok:

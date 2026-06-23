@@ -369,6 +369,8 @@ Communicate like an engineer briefing the team: short and non-repetitive, withou
 
 ## Loop
 1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
+   **Create the ticket first.** If creating it fails (creds, a cross-project block) it errors red and
+   stops — do NOT proceed to open a PR without a ticket. Fix the cause (`emkeel connect`) and retry.
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.
 3. Every bug fix starts with a failing test (permanent regression guard).
 4. Open a PR. Merge requires: CI green + your approval + a linked ticket.
