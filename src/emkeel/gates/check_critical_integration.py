@@ -22,6 +22,8 @@ CRITICAL_FILES = (
     "src/emkeel/init.py",          # distribution: _files / scaffold / the _agents_md agent contract
     "src/emkeel/update.py",        # distribution: wiring refresh + drift detection
     "src/emkeel/ship.py",          # distribution: the scope-gated maintenance-lane ship
+    "src/emkeel/process.py",       # governed-process engine (non-skippable steps, approval invariant)
+    "src/emkeel/strategy.py",      # the /strategy process schema + its CLI
 )
 CRITICAL_DIR_PREFIXES = (
     "src/emkeel/gates/",           # any CI gate (the enforcement layer itself)

@@ -101,3 +101,49 @@ def test_one_bad_doc_fails_the_build(tmp_path, monkeypatch):
 
 def test_required_done_steps_is_through_checked():
     assert g.required_done_steps() == ["scaffolded", "researched", "proposed", "critiqued", "checked"]
+
+
+# ── KEEL-104: a committed 'approved' is never accepted (no self-certified human approval) ──
+
+def _present_ts(tmp_path, topic="auth"):
+    """Drive to `presented` (the legitimate terminal committed state in a lane PR)."""
+    p = _drive_to_checked(tmp_path, topic)
+    advance_on_disk(strategy_process(), p, "presented", {"presented_to": "operator"}, timestamp=TS)
+    return p
+
+
+def test_passes_at_presented(tmp_path, monkeypatch):
+    _md(tmp_path); _present_ts(tmp_path)
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 0     # presented (not approved) → OK
+
+
+def test_fails_when_committed_claims_approved(tmp_path, monkeypatch, capsys):
+    # THE BUG: the committed file says approved while no human approved (the merge hasn't happened).
+    _md(tmp_path)
+    p = _present_ts(tmp_path)
+    advance_on_disk(strategy_process(), p, "approved", {"approved_by": "operador"}, timestamp=TS)
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 1
+    assert "approved" in capsys.readouterr().err.lower()
+
+
+def test_fails_on_forged_approved_without_presented(tmp_path, monkeypatch):
+    # a hand-forged state: approved 'done' but presented never happened (a hole) → incoherent + approved.
+    _md(tmp_path)
+    state = new_state(strategy_process())
+    state["state"] = "approved"
+    for s in ("scaffolded", "researched", "proposed", "critiqued", "checked", "approved"):
+        state["steps"][s] = {"done": True, "timestamp": TS}
+    state["steps"]["researched"]["sources"] = ["https://nist.gov/x"]
+    save_state(tmp_path / SDIR / "auth.process.json", state)
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 1
+
+
+def test_fails_on_out_of_order_timestamps(tmp_path, monkeypatch, capsys):
+    _md(tmp_path)
+    p = _present_ts(tmp_path)
+    import json
+    st = json.loads(p.read_text())
+    st["steps"]["presented"]["timestamp"] = "2020-01-01T00:00:00Z"   # before earlier steps → back-dated
+    p.write_text(json.dumps(st))
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 1
+    assert "order" in capsys.readouterr().err.lower()

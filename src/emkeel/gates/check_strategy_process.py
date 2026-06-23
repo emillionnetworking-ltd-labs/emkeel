@@ -53,6 +53,35 @@ def check_doc(md: str, strategy_dir: str, target: Path) -> str | None:
     ok, why = _researched_provenance(provenance)
     if not ok:
         return f"{md} — the 'researched' step lacks provenance: {why} (no silent skip of the research)."
+
+    # INVARIANT (KEEL-104): the committed record may NOT certify a human approval. `approved_by` is a
+    # forgeable self-written field; the REAL human gate is the PR review + merge (branch protection
+    # requires a human approving review). So a committed process caps at `presented` — `approved` is
+    # granted by the merge, not pre-stamped in the file. A committed `approved` is a lie at CI time → FAIL.
+    if step_done(state, "approved") or state.get("state") == "approved":
+        return (f"{md} — the committed process claims 'approved', but a committed file can't certify a "
+                "human approval the merge hasn't granted yet (the approving PR review IS the human gate). "
+                "Stop at 'presented'; approval is the operator's review + merge, not a self-written field.")
+
+    # COHERENCE: the done steps must be a contiguous prefix (no holes / out-of-order forgery) with
+    # non-decreasing timestamps — reject a fabricated state that skipped a step or back-dated one.
+    incoherent = _coherence_problem(state)
+    if incoherent:
+        return f"{md} — incoherent process state: {incoherent}"
+    return None
+
+
+def _coherence_problem(state: dict) -> str | None:
+    """None if the done steps form a contiguous prefix of the schema with monotonic timestamps."""
+    names = [s.name for s in strategy_process().steps]
+    done = [n for n in names if step_done(state, n)]
+    # contiguous prefix: the done set must equal the first len(done) steps (no gaps, no out-of-order)
+    if done != names[: len(done)]:
+        return f"steps done out of order / with holes ({done}); the engine advances strictly in sequence."
+    stamps = [state["steps"][n].get("timestamp", "") for n in done]
+    given = [s for s in stamps if s]
+    if given != sorted(given):
+        return "step timestamps are out of order (a step is dated before an earlier one)."
     return None
 
 

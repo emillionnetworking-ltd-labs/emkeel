@@ -114,6 +114,12 @@ def advance(schema: ProcessSchema, state: dict, step_name: str,
     """Pure in-RAM transition: re-check prereq + required evidence + payload validation, then mark the
     step done and move `state` forward. Raises PrereqError on any refusal. No disk I/O."""
     fields = dict(fields or {})
+    if schema.index(step_name) == 0 and state.get("steps"):
+        # Re-entering the FIRST step restarts the process — a new run/refinement starts CLEAN and never
+        # inherits prior steps (notably a prior `approved`). The engine never auto-advances; a stale
+        # approval can't survive into a fresh refinement.
+        state["steps"] = {}
+        state["state"] = None
     ok, msg = evaluate_prereq(schema, state, step_name)
     if not ok:
         raise PrereqError(msg)

@@ -471,18 +471,24 @@ shows where you are. Run each `advance` ONLY after that step's work is done.
 5. **Check** — run `emkeel strategy check <topic>` and fix until it passes (green = sourced + complete). Then:
    `emkeel strategy advance checked <topic> --set=check_passed=true`
 6. **Human gate — present** — present the options + your recommendation to the operator. **Do NOT decide
-   for them.** Record that you showed it (this does NOT approve anything):
+   for them.** Record that you showed it (this does NOT approve anything) — this is the LAST step you
+   commit in the lane PR:
    `emkeel strategy advance presented <topic> --set=presented_to=<operator>`
-7. **Human gate — approve** — the operator approves / refines / aborts. Run ONLY after a real "yes",
-   recording WHO approved:
-   `emkeel strategy advance approved <topic> --set=approved_by=<operator>`
-   Then set `Status: APPROVED`, finalize the Recommendation, offer to record the decision as an ADR in
-   `emkeel-governance/adr/`, and remind them to add `Strategy: <topic>` to feature specs (the
-   `check_strategy_link` gate enforces it).
+7. **Approval is the MERGE — never stamp it yourself.** The operator approves by **approving + merging the
+   PR** (branch protection requires a human approving review). Do NOT run `emkeel strategy advance approved`
+   in the lane PR — a self-written `approved_by` certifies nothing, and the `check_strategy_process` gate
+   FAILS a committed `approved` (the merge hasn't happened yet). The committed `<topic>.process.json` stops
+   at `presented`; the merge IS the approval, recorded immutably in the PR/git history.
+   On the operator's yes, set `Status: APPROVED` in the doc, finalize the Recommendation, offer to record
+   the decision as an ADR in `emkeel-governance/adr/`, and remind them to add `Strategy: <topic>` to
+   feature specs (the `check_strategy_link` gate enforces it).
+
+**Refining an existing strategy?** A new refinement (a new ticket on the same `<topic>`) starts the process
+CLEAN — re-run from `scaffolded`; the engine resets and a prior refinement's `approved` NEVER carries over.
 
 **Commit `emkeel-governance/strategy/<topic>.process.json` alongside the doc** — it is the proof the steps
 ran, and CI reads it. `emkeel strategy status <topic>` shows ✓/· per step. Never skip the human gate
-(steps 6–7 are the operator's). Never cite a source you didn't open.
+(presenting + the merge are the operator's). Never cite a source you didn't open.
 """
 
 
