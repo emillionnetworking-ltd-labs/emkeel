@@ -13,7 +13,8 @@ def _run(monkeypatch, changed):
 
 def test_manifest_marks_the_critical_surfaces():
     for f in ("src/emkeel/jira.py", "src/emkeel/isolation.py", "src/emkeel/init.py",
-              "src/emkeel/update.py", "src/emkeel/ship.py",
+              "src/emkeel/update.py", "src/emkeel/ship.py", "src/emkeel/process.py",
+              "src/emkeel/strategy.py",
               "src/emkeel/gates/check_ticket_link.py"):          # any gate, via the dir prefix
         assert g.is_critical(f), f
 

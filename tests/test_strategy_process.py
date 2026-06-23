@@ -131,3 +131,24 @@ def test_cli_status_not_started(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("EMKEEL_REPO_DIR", str(tmp_path))
     assert main(["status", "auth"]) == 0
     assert "process not started" in capsys.readouterr().out
+
+
+# ── KEEL-104: a refinement resets the process — a prior `approved` never carries over ──
+
+def test_reentering_first_step_resets_the_process():
+    st = new_state(SCHEMA)
+    # drive a full prior refinement to approved
+    _walk_to(st,
+             ("scaffolded", {"topic": "auth"}),
+             ("researched", {"internal_only": True}),
+             ("proposed", {"options": ["a", "b"]}),
+             ("critiqued", {"critique": "x"}),
+             ("checked", {"check_passed": True}),
+             ("presented", {"presented_to": "op"}),
+             ("approved", {"approved_by": "op"}))
+    assert st["state"] == "approved" and step_done(st, "approved")
+    # a NEW refinement re-enters scaffolded → CLEAN reset (the prior approved is gone)
+    advance(SCHEMA, st, "scaffolded", {"topic": "auth"}, timestamp=TS)
+    assert st["state"] == "scaffolded"
+    assert step_done(st, "scaffolded") and not step_done(st, "approved")
+    assert list(st["steps"]) == ["scaffolded"]
