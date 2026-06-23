@@ -89,6 +89,13 @@ jobs:
           EMKEEL_BASE_REF: ${{ github.base_ref }}
         run: python -m emkeel.gates.check_strategy_process
 
+      # Gate: un cambio a una superficie CRÍTICA (creds/aislación/distribución/contrato/gates) exige un test de integración.
+      - name: "Gate — critical change needs an integration test"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+        run: python -m emkeel.gates.check_critical_integration
+
       # Gate: un feature que sirve a una estrategia debe ACUSAR su alineación (sección Alignment). Dormant si no hay estrategias.
       - name: "Gate — strategy alignment (feature acknowledges the north star)"
         if: github.event_name == 'pull_request'

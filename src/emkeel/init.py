@@ -316,6 +316,11 @@ jobs:
         env:
           EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
         run: python -m emkeel.gates.check_strategy_process
+      - name: "Gate - critical change needs an integration test (tests/integration/)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
+        run: python -m emkeel.gates.check_critical_integration
       - name: "Gate - strategy alignment (feature acknowledges the north star)"
         if: github.event_name == 'pull_request'
         env:
@@ -374,6 +379,16 @@ Communicate like an engineer briefing the team: short and non-repetitive, withou
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.
 3. Every bug fix starts with a failing test (permanent regression guard).
 4. Open a PR. Merge requires: CI green + your approval + a linked ticket.
+
+## Don't break something else in silence
+- **Critical / cross-cutting change → add an INTEGRATION test.** If you touch creds, isolation, the
+  distribution wiring, the agent contract, or a CI gate, add/extend a test under `tests/integration/`
+  that exercises the affected flow end-to-end — not just a unit test. (The `check_critical_integration`
+  gate enforces this; born from a creds change that silently broke ticket creation.)
+- **Critical infra must be self-sufficient.** Don't depend on optional environment tools (e.g. `direnv`);
+  read what you need directly (in-process) so the flow works on a bare machine.
+- **Never hide failures with `2>/dev/null`** on a step that can fail, and **verify the `cwd`/destination
+  before writing** — a silenced `cd` that failed once clobbered a real `.env`.
 
 ## Strategy (the north star — don't drift)
 - A development strategy for an area lives in `emkeel-governance/strategy/<area>.md` (goal,

@@ -248,6 +248,20 @@ def test_ci_includes_strategy_process_gate(tmp_path):
     assert "check_strategy_process" in ci
 
 
+def test_ci_includes_critical_integration_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    assert "check_critical_integration" in ci
+
+
+def test_agents_contract_demands_integration_test_and_self_sufficiency(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    agents = (tmp_path / "AGENTS.md").read_text()
+    assert "tests/integration/" in agents and "INTEGRATION test" in agents
+    assert "self-sufficient" in agents and "direnv" in agents
+    assert "2>/dev/null" in agents
+
+
 def test_strategy_skill_drives_the_engine(tmp_path):
     # KEEL-100: the distributed skill must DRIVE the process engine, not just call new/check.
     apply(tmp_path, CFG, force=False, dry_run=False)
