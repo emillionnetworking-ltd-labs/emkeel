@@ -11,7 +11,7 @@ Subcommands:
   emkeel update          refresh the wiring AND ship it (maintenance lane → PR → auto-merge); --no-ship to leave pending
   emkeel set <f> <v>     change an emkeel.toml value (jira-project | jira-url | github-repo) and ship it; --no-ship too
   emkeel strategy …      scaffold (new <topic>) + lint (check) researched strategy artifacts
-  emkeel jira create …   create a Jira issue (--project --summary [--type Task] [--status]); the convenience behind the hard gate
+  emkeel jira create …   create a Jira issue in the project's INITIAL state (--project --summary [--type Task]); Done is earned via transition + merge, not at create
   emkeel version         show the installed version (and if a newer one is on PyPI)
 """
 

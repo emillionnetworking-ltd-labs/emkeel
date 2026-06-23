@@ -5,8 +5,9 @@ it (POST a new ticket). `issue_status` backs the hard existence check `check_tic
 The HTTP layer is injectable so the decision logic is unit-tested without network.
 
 CLI:  python -m emkeel.jira [KEY] [--status Done]          transition (KEY from EMKEEL_BRANCH/PR_TITLE)
-      python -m emkeel.jira create --project ECO --summary "..." [--type Task] [--status Done]
-      Credentials come from JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN.
+      python -m emkeel.jira create --project ECO --summary "..." [--type Task]
+      create makes the issue in the project's INITIAL state — it has no --status (Done is earned by the
+      work + the merge, via `transition`, never written at create). Creds: JIRA_BASE_URL / EMAIL / TOKEN.
 """
 
 from __future__ import annotations
@@ -185,13 +186,26 @@ def _main_create(rest: list[str]) -> int:
     ap.add_argument("--summary", required=True)
     ap.add_argument("--type", dest="issuetype", default="Task")
     ap.add_argument("--description", default="")
-    ap.add_argument("--status", default=None, help="optionally transition the new issue to this status")
+    # `--status` is intentionally still PARSED so a born-Done attempt gets a clear message instead of
+    # argparse's opaque "unrecognized arguments" — it is rejected below, never honored.
+    ap.add_argument("--status", default=None, help=argparse.SUPPRESS)
     ns = ap.parse_args(rest)
     # HARD, non-silent failures (like the guard): on a block or missing creds, error RED and STOP — the
     # agent must NOT proceed to open a PR with no ticket.
     blocked = _isolation_block_project(ns.project)
     if blocked:
         print(f"::error::{blocked}\nSTOP: do not open a PR without a ticket — fix the project/window first.",
+              file=sys.stderr)
+        return 1
+    # A ticket is BORN in the project's INITIAL state — creation never sets status. `Done` (and any other
+    # status) is EARNED by the work + the merge, not auto-written at create — the spirit of KEEL-104 applied
+    # to completion (ECO-69/70 were created already Done, skipping work→merge→Done). Reject BEFORE creating
+    # so nothing is half-made; a status change goes through `emkeel jira transition` + the merge.
+    if ns.status is not None:
+        print("::error::`emkeel jira create` does not set status — a ticket is born in the project's "
+              "INITIAL state. A terminal status (Done/Closed/Resolved/…) is earned by the work and the "
+              "merge, never written at create. Drop --status; move the issue later with "
+              "`emkeel jira transition` once the work merges.\nSTOP: re-run create without --status.",
               file=sys.stderr)
         return 1
     if not secrets_present():
@@ -203,11 +217,7 @@ def _main_create(rest: list[str]) -> int:
     if not ok:
         print(f"::error::{res}", file=sys.stderr)
         return 1
-    print(res)                                   # the new key (stdout, scriptable)
-    if ns.status:
-        tok, msg = transition_issue(res, ns.status)
-        print(msg, file=(sys.stdout if tok else sys.stderr))
-        return 0 if tok else 1
+    print(res)                                   # the new key (stdout, scriptable) — in the initial state
     return 0
 
 

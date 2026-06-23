@@ -193,15 +193,29 @@ def test_cli_create_requires_secrets(monkeypatch, capsys):
     assert "::error::" in capsys.readouterr().err
 
 
-def test_cli_create_then_transition(monkeypatch, capsys):
+def test_cli_create_lands_in_initial_state(monkeypatch, capsys):
+    # a normal create makes the issue and NEVER transitions it — it is born in the project's initial state.
     monkeypatch.setattr(J, "find_identity", lambda p: None)
     for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
         monkeypatch.setenv(k, "x")
     monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "ECO-50"))
-    seen = {}
-    monkeypatch.setattr(J, "transition_issue", lambda key, status="Done", **k: (seen.update(key=key, status=status), (True, "ok"))[1])
-    assert J.main(["create", "--project", "ECO", "--summary", "x", "--status", "Done"]) == 0
-    assert seen == {"key": "ECO-50", "status": "Done"}
+    monkeypatch.setattr(J, "transition_issue",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("create must not transition")))
+    assert J.main(["create", "--project", "ECO", "--summary", "x"]) == 0
+    assert capsys.readouterr().out.strip() == "ECO-50"
+
+
+def test_cli_create_refuses_status_done(monkeypatch, capsys):
+    # THE BUG (ECO-69/70): a ticket must not be born Done — create --status Done is rejected, nothing created.
+    monkeypatch.setattr(J, "find_identity", lambda p: None)
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+    created = {"n": 0}
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (created.update(n=1), (True, "ECO-70"))[1])
+    assert J.main(["create", "--project", "ECO", "--summary", "build", "--status", "Done"]) == 1
+    err = capsys.readouterr().err
+    assert "::error::" in err and "INITIAL state" in err and "--status" in err
+    assert created["n"] == 0                                   # never created — rejected BEFORE create
 
 
 # ── isolation: the CLI guard refuses a cross-project jira action (defense in depth) ──

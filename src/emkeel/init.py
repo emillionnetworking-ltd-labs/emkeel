@@ -374,11 +374,14 @@ Communicate like an engineer briefing the team: short and non-repetitive, withou
 
 ## Loop
 1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
-   **Create the ticket first.** If creating it fails (creds, a cross-project block) it errors red and
+   **Create the ticket first**, in the project's INITIAL state — `emkeel jira create` has no `--status`; a
+   ticket is never born `Done`. If creating it fails (creds, a cross-project block) it errors red and
    stops — do NOT proceed to open a PR without a ticket. Fix the cause (`emkeel connect`) and retry.
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.
 3. Every bug fix starts with a failing test (permanent regression guard).
 4. Open a PR. Merge requires: CI green + your approval + a linked ticket.
+5. **`Done` is earned by the work + the merge** — move the ticket with `emkeel jira transition` after it
+   merges, never at create. (Like a strategy's `approved`, a terminal state is never self-written up front.)
 
 ## Don't break something else in silence
 - **Critical / cross-cutting change → add an INTEGRATION test.** If you touch creds, isolation, the
