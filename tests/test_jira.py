@@ -227,3 +227,60 @@ def test_cli_transition_blocks_cross_project(monkeypatch, capsys):
     monkeypatch.setattr(J, "transition_issue", lambda *a, **k: (_ for _ in ()).throw(AssertionError("called")))
     assert J.main([]) == 1                                                    # ECO-7 in a KEEL repo → refused
     assert "isolation" in capsys.readouterr().err
+
+
+# ── scoped-cred loading without direnv (KEEL-102): the exact gap that let a PR ship with no ticket ──
+
+def _governed_repo_with_env(tmp_path, project="DEMO", env=True):
+    (tmp_path / "emkeel.toml").write_text(
+        f'[jira]\nbase_url = "https://x.atlassian.net"\nproject_key = "{project}"\n[github]\nrepo = "o/r"\n')
+    if env:
+        (tmp_path / ".env").write_text(
+            "GH_TOKEN=github_pat_x\nJIRA_BASE_URL=https://x.atlassian.net\n"
+            "JIRA_EMAIL=me@x.co\nJIRA_TOKEN=jt-secret\n")
+
+
+def _no_jira_env(monkeypatch):
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_create_reads_scoped_env_when_direnv_absent(tmp_path, monkeypatch):
+    # THE REGRESSION: no creds in the environment (direnv never loaded .env), but the repo's scoped .env
+    # has them → `emkeel jira create --project <own>` reads it in-process and SUCCEEDS.
+    _governed_repo_with_env(tmp_path, "DEMO", env=True)
+    monkeypatch.chdir(tmp_path)
+    _no_jira_env(monkeypatch)                                     # nothing in the environment
+    assert J.secrets_present() is True                           # …yet creds resolve, via the scoped .env
+    seen = {}
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (seen.update(reached=True), (True, "DEMO-1"))[1])
+    assert J.main(["create", "--project", "DEMO", "--summary", "x"]) == 0
+    assert seen.get("reached") is True                           # creds found → create proceeded
+
+
+def test_scoped_env_does_not_relax_isolation(tmp_path, monkeypatch, capsys):
+    # AISLACIÓN INTACTA: even with the scoped .env present, a cross-project create is still BLOCKED.
+    _governed_repo_with_env(tmp_path, "DEMO", env=True)
+    monkeypatch.chdir(tmp_path)
+    _no_jira_env(monkeypatch)
+    called = {"n": 0}
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (called.update(n=1), (True, "ECO-9"))[1])
+    assert J.main(["create", "--project", "ECO", "--summary", "x"]) == 1     # DEMO repo → ECO refused
+    assert "isolation" in capsys.readouterr().err and called["n"] == 0       # guard fired BEFORE creds/create
+
+
+def test_create_hard_fails_without_any_creds(tmp_path, monkeypatch, capsys):
+    # FALLO DURO no-silencioso: no env AND no .env → red error + exit!=0 (never a silent skip).
+    _governed_repo_with_env(tmp_path, "DEMO", env=False)          # no .env written
+    monkeypatch.chdir(tmp_path)
+    _no_jira_env(monkeypatch)
+    assert J.secrets_present() is False
+    rc = J.main(["create", "--project", "DEMO", "--summary", "x"])
+    assert rc == 1                                               # exit != 0
+    err = capsys.readouterr().err
+    assert "::error::" in err and "STOP" in err                  # loud + tells the agent to stop
+
+
+def test_scoped_env_values_is_failsafe_when_ungoverned(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)                                   # no emkeel.toml → no identity
+    assert J._scoped_env_values() == {}                          # never raises, empty
