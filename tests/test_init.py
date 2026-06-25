@@ -257,6 +257,12 @@ def test_ci_includes_critical_integration_gate(tmp_path):
     assert "check_critical_integration" in ci
 
 
+def test_ci_includes_doc_conventions_gate(tmp_path):
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
+    assert "check_doc_conventions" in ci
+
+
 def test_agents_contract_demands_integration_test_and_self_sufficiency(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     agents = (tmp_path / "AGENTS.md").read_text()

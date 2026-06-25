@@ -1,6 +1,6 @@
 # Strategy: governance-doc-conventions
 
-Status: DRAFT
+Status: APPROVED
 Strategy: governance-doc-conventions   <!-- feature specs reference this with a `Strategy: governance-doc-conventions` line -->
 
 ## Goal
@@ -50,5 +50,7 @@ Independent of which option below is chosen, the convention names three register
 - **Not auto-generating ADRs** — authoring stays manual; the gate only refuses inconsistent ones.
 
 ## Decisions
-<!-- optional: link the chosen decision as an ADR, e.g. emkeel-governance/adr/007-<slug>.md -->
-<!-- On approval: record as emkeel-governance/adr/0008-governance-doc-conventions.md (canonical fields + three-register language rule + bidirectional supersession + the check_doc_conventions gate). -->
+- **APPROVED — Option 2** (canonical English inline fields + the `check_doc_conventions` hygiene gate),
+  recorded as **[ADR-0008](../adr/0008-governance-doc-conventions.md)** (the three-register language rule +
+  the ADR field contract + bidirectional supersession + the gate). Implemented in KEEL-109:
+  `src/emkeel/gates/check_doc_conventions.py`, wired into the generated CI of every governed repo.

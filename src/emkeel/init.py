@@ -339,6 +339,9 @@ jobs:
         env:
           EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
         run: python -m emkeel.gates.check_critical_integration
+      - name: "Gate - governance-doc conventions (canonical English fields + bidirectional ADR supersession)"
+        if: github.event_name == 'pull_request'
+        run: python -m emkeel.gates.check_doc_conventions
       - name: "Gate - strategy alignment (feature acknowledges the north star)"
         if: github.event_name == 'pull_request'
         env:
