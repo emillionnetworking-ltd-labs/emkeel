@@ -24,6 +24,7 @@ def _seeded_with_remote(tmp_path):
     work = tmp_path / "work"
     work.mkdir()
     _git(["init", "-q"], work)
+    _git(["symbolic-ref", "HEAD", "refs/heads/main"], work)     # force 'main' (CI's git defaults to master)
     _git(["config", "user.email", "t@t"], work)
     _git(["config", "user.name", "t"], work)
     init.apply(work, init.Config(jira_url="https://x", jira_project="ECO", github_repo="o/r"),
