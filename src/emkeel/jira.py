@@ -181,17 +181,22 @@ def transition_issue(key: str, target: str = "Done", *, caller=None, verify: boo
     return _verify_now(skipped=False)
 
 
-# ── sprint placement (KEEL-106): no ticket is orphaned in silence ─────────────────────────────────────
-# When the project uses sprints (it has a SCRUM board), every newly created ticket gets a CONSCIOUS
-# placement — active sprint or backlog — and emkeel ALWAYS surfaces the recommendation. The 53-orphan
-# incident (ECO tickets left with no sprint) came from nothing guiding placement. The *result* is flexible;
-# the INVARIANT is that a recommendation is ALWAYS produced and a placement is ALWAYS chosen — never
-# silence. N/A on Kanban (no scrum board). Best-effort + non-fatal: the ticket already exists, so a
-# placement hiccup is a loud ::warning::, never a create failure — and never a silent orphan.
+# ── sprint placement (KEEL-106/111): no ticket is orphaned in silence; the OPERATOR decides ───────────
+# When the project uses sprints, every newly created ticket gets a surfaced recommendation and a CONSCIOUS
+# backlog placement — emkeel never auto-adds it to a sprint. The 53-orphan incident (ECO tickets with no
+# sprint) came from nothing guiding placement; ECO-73 then slipped because detection missed a Team-managed
+# board with sprints. The INVARIANT: a recommendation is ALWAYS produced + surfaced, and the ticket is
+# always consciously placed (left in the backlog, labeled pending) — never silence. But the SPRINT placement
+# is the OPERATOR's call: by default we recommend + leave it pending, not auto-place. N/A on Kanban.
+# Best-effort + non-fatal: the ticket already exists, so a placement hiccup is a loud ::warning::, never a
+# create failure — and never a silent orphan.
+
+PENDING_LABEL = "emkeel-placement-pending"
+
 
 @dataclass(frozen=True)
 class Placement:
-    """A conscious sprint-placement decision. `kind` ∈ {active_sprint, backlog, none, indeterminate}:
+    """A sprint-placement recommendation/decision. `kind` ∈ {active_sprint, backlog, none, indeterminate}:
     `none` = the project doesn't use sprints (Kanban) → N/A; `indeterminate` = the Agile API couldn't be
     reached to decide (surfaced as a warning, never a silent skip)."""
     kind: str
@@ -200,13 +205,23 @@ class Placement:
     sprint_name: str | None = None
 
 
-def _scrum_board(project: str, *, caller) -> tuple[int | None, bool]:
-    """(scrum board id or None, reachable). reachable=False when the Agile API doesn't answer 200."""
-    status, data = caller("GET", f"/rest/agile/1.0/board?projectKeyOrId={project}&type=scrum")
+def _sprint_board(project: str, *, caller) -> tuple[int | None, bool]:
+    """(id of a board that SUPPORTS sprints, reachable). Detected by CAPABILITY — a board whose sprint
+    endpoint answers 200 — NOT by `type=scrum`, so a Team-managed/'simple' board that HAS sprints (e.g.
+    ECO's board 100, which the `type=scrum` filter silently misses) is correctly recognized. A Kanban board
+    answers 400 ('does not support sprints') and is skipped. reachable=False ONLY when the boards list
+    itself can't be read (→ indeterminate, never a silent Kanban)."""
+    status, data = caller("GET", f"/rest/agile/1.0/board?projectKeyOrId={project}")
     if status != 200 or not isinstance(data, dict):
         return None, False
-    vals = data.get("values") or []
-    return (vals[0].get("id") if vals else None), True
+    for b in (data.get("values") or []):
+        bid = b.get("id")
+        if bid is None:
+            continue
+        st, _ = caller("GET", f"/rest/agile/1.0/board/{bid}/sprint?maxResults=1")
+        if st == 200:                      # the board supports sprints (capability, regardless of type)
+            return bid, True
+    return None, True                      # boards exist but none supports sprints → genuine Kanban
 
 
 def _active_sprint(board_id: int, *, caller) -> dict | None:
@@ -222,11 +237,11 @@ def recommend_placement(project: str, *, caller=None) -> Placement:
     sprint if one is running (the work has a home), else the backlog. `none` on Kanban; `indeterminate`
     if the Agile API can't be reached."""
     caller = caller or _default_caller()
-    board_id, reachable = _scrum_board(project, caller=caller)
+    board_id, reachable = _sprint_board(project, caller=caller)
     if not reachable:
         return Placement("indeterminate", "couldn't reach the Jira Agile API to check sprint usage")
     if board_id is None:
-        return Placement("none", "project has no scrum board (Kanban) — sprints don't apply")
+        return Placement("none", "project has no board that supports sprints (Kanban) — sprints don't apply")
     sprint = _active_sprint(board_id, caller=caller)
     if sprint:
         return Placement("active_sprint", "work is in progress — the active sprint is its home",
@@ -252,16 +267,16 @@ def place_issue(key: str, placement: Placement, *, caller=None) -> tuple[bool, s
 
 
 def _resolve_placement(choice: str | None, rec: Placement, project: str, *, caller) -> Placement:
-    """Turn the `--sprint` choice into a concrete placement. 'auto' (or None) → the recommendation;
-    'backlog' / 'active' / a numeric sprint id force a specific placement (the rec is still surfaced)."""
-    if choice in (None, "auto"):
-        return rec
+    """Turn an EXPLICIT `--sprint` choice into a concrete placement. 'backlog' / 'active' / a numeric sprint
+    id force a specific placement — this is the operator deciding at create time. ('auto'/None is handled by
+    the caller as recommend-but-don't-place, so it isn't expected here.)"""
     if choice == "backlog":
         return Placement("backlog", "chosen explicitly (--sprint backlog)")
     if choice == "active":
         if rec.kind == "active_sprint":
-            return rec
-        board_id, reachable = _scrum_board(project, caller=caller)
+            return Placement("active_sprint", "chosen explicitly (--sprint active)",
+                             sprint_id=rec.sprint_id, sprint_name=rec.sprint_name)
+        board_id, reachable = _sprint_board(project, caller=caller)
         sprint = _active_sprint(board_id, caller=caller) if (reachable and board_id) else None
         if sprint:
             return Placement("active_sprint", "chosen explicitly (--sprint active)",
@@ -273,10 +288,35 @@ def _resolve_placement(choice: str | None, rec: Placement, project: str, *, call
     return rec
 
 
+def _mark_pending(key: str, *, caller) -> tuple[bool, str]:
+    """Leave the issue CONSCIOUSLY in the backlog and LABEL it pending an operator placement decision —
+    so it's surfaced now and discoverable later (`emkeel doctor`), without auto-placing it in a sprint."""
+    caller("POST", "/rest/agile/1.0/backlog/issue", {"issues": [key]})        # conscious backlog (best-effort)
+    st, _ = caller("PUT", f"/rest/api/3/issue/{key}", {"update": {"labels": [{"add": PENDING_LABEL}]}})
+    if st in (200, 204):
+        return True, f"left in the backlog, labeled '{PENDING_LABEL}'"
+    return False, f"left in the backlog but could not add the '{PENDING_LABEL}' label (HTTP {st})"
+
+
+def pending_placements(project: str, *, caller=None) -> list[str]:
+    """Keys of issues in `project` LABELED pending a sprint-placement decision and not yet Done — the
+    `emkeel doctor` nudge: the recommendation was surfaced and the ticket left consciously in the backlog;
+    these still await the operator's call. Empty on any API hiccup (best-effort, never raises here)."""
+    import urllib.parse
+    caller = caller or _default_caller()
+    jql = (f"project = {project} AND labels = {PENDING_LABEL} AND statusCategory != Done "
+           "ORDER BY created DESC")
+    status, data = caller("GET", f"/rest/api/3/search?jql={urllib.parse.quote(jql)}&fields=key&maxResults=50")
+    if status != 200 or not isinstance(data, dict):
+        return []
+    return [i.get("key") for i in (data.get("issues") or []) if i.get("key")]
+
+
 def _place_after_create(key: str, project: str, choice: str | None) -> None:
-    """The no-orphan invariant in action: when the project uses sprints, ALWAYS surface a recommendation
-    and ALWAYS apply a placement (default = the recommendation; `--sprint` overrides). All messaging goes
-    to stderr so stdout stays just the key (scriptable). Non-fatal by design."""
+    """No-orphan, operator-decides: when the project uses sprints, ALWAYS surface the recommendation. By
+    DEFAULT (no `--sprint`) do NOT auto-add to a sprint — leave the ticket in the backlog labeled pending
+    for the operator to promote. An explicit `--sprint active|backlog|<id>` is the operator deciding at
+    create time. All messaging is on stderr (stdout stays just the key). Non-fatal by design."""
     try:
         caller = _default_caller()
         rec = recommend_placement(project, caller=caller)
@@ -289,7 +329,18 @@ def _place_after_create(key: str, project: str, choice: str | None) -> None:
         where = (f"sprint '{rec.sprint_name}' (#{rec.sprint_id})" if rec.kind == "active_sprint"
                  else "the backlog")
         print(f"::notice::{key}: recommended placement → {where} ({rec.rationale}).", file=sys.stderr)
-        target = _resolve_placement(choice, rec, project, caller=caller)
+
+        explicit = choice not in (None, "auto")
+        # DEFAULT + a sprint is recommended → the OPERATOR decides: leave it pending, never auto-place.
+        if not explicit and rec.kind == "active_sprint":
+            ok, msg = _mark_pending(key, caller=caller)
+            tail = "" if ok else " — do it manually so it isn't orphaned"
+            print(f"::notice::{key}: placement is YOURS to decide — {msg}; promote it to sprint "
+                  f"'{rec.sprint_name}' (#{rec.sprint_id}) when you choose (`emkeel doctor` lists pending "
+                  f"ones).{tail}", file=sys.stderr)
+            return
+        # No active sprint (rec=backlog) or an explicit choice → apply the concrete placement.
+        target = rec if not explicit else _resolve_placement(choice, rec, project, caller=caller)
         ok, msg = place_issue(key, target, caller=caller)
         print((msg if ok else f"::warning::{msg} — place it manually so it isn't orphaned."),
               file=sys.stderr)
@@ -305,8 +356,8 @@ def _main_create(rest: list[str]) -> int:
     ap.add_argument("--type", dest="issuetype", default="Task")
     ap.add_argument("--description", default="")
     ap.add_argument("--sprint", default="auto",
-                    help="placement when the project uses sprints: auto (default = the recommendation) | "
-                         "active | backlog | <sprintId>")
+                    help="sprint placement when the project uses sprints: auto (default = recommend, then "
+                         "leave it in the backlog pending YOUR decision) | active | backlog | <sprintId>")
     # `--status` is intentionally still PARSED so a born-Done attempt gets a clear message instead of
     # argparse's opaque "unrecognized arguments" — it is rejected below, never honored.
     ap.add_argument("--status", default=None, help=argparse.SUPPRESS)
