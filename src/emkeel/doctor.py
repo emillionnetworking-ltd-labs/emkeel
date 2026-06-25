@@ -88,13 +88,19 @@ def gather(target: Path) -> dict:
     st = {"governed": (target / "emkeel.toml").is_file(), "repo": "", "connected": False,
           "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main",
           "drift": [], "jira_project": "", "branch_key": "", "required_checks": ["gates"],
-          "required_missing": [], "maint_pr": None, "env_scoped_ok": None}
+          "required_missing": [], "maint_pr": None, "env_scoped_ok": None, "pending_placements": []}
     if st["governed"]:
         from emkeel.update import load_cfg, origin_jira_project, wiring_drift
         st["drift"] = wiring_drift(target)   # generated files that `emkeel update` would refresh
         envp = target / ".env"               # the scoped local credential (gitignored) — written by connect
         st["env_scoped_ok"] = envp.is_file() and "GH_TOKEN" in envp.read_text(encoding="utf-8", errors="replace")
         st["jira_project"] = origin_jira_project(target)   # project on origin/<default>, not the local branch
+        try:                                 # best-effort nudge: tickets awaiting a sprint-placement decision
+            from emkeel.jira import pending_placements, secrets_present
+            if st["jira_project"] and secrets_present():
+                st["pending_placements"] = pending_placements(st["jira_project"])
+        except Exception:
+            pass                             # never let the nudge break doctor
         cfg = load_cfg(target)
         if cfg:
             st["required_checks"] = cfg.required_checks
@@ -151,6 +157,11 @@ def report_lines(st: dict) -> list[str]:
     if st.get("governed") and st.get("env_scoped_ok") is False:
         out.append("  ⚠ scoped local credential missing (.env GH_TOKEN) → run: emkeel connect"
                    "   · falta la credencial local aislada → corre: emkeel connect")
+    pp = st.get("pending_placements") or []
+    if pp:
+        shown = ", ".join(pp[:10]) + ("…" if len(pp) > 10 else "")
+        out.append(f"  ⚠ {len(pp)} ticket(s) awaiting a sprint-placement decision ({shown})"
+                   "   → promote each into a sprint, or leave it in the backlog deliberately")
     jp, bk = st.get("jira_project"), st.get("branch_key")
     if jp and bk and bk.split("-")[0] != jp:
         out.append(f"  ⚠ branch '{bk}' ≠ configured Jira project '{jp}'"
@@ -191,6 +202,8 @@ def report_lines(st: dict) -> list[str]:
         pending.append("drift")
     if st.get("governed") and st.get("env_scoped_ok") is False:
         pending.append("env")
+    if st.get("pending_placements"):
+        pending.append("placement")
     out.append("")
     out.append("  All set ✓" if not pending else f"  {len(pending)} step(s) pending — see ⚠/✗ above.")
     return out

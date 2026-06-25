@@ -38,6 +38,14 @@ def test_pending_lists_gaps_with_links():
     assert _has(r, "pending")
 
 
+def test_nudges_pending_sprint_placements():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "pending_placements": ["ECO-73", "ECO-80"]})
+    assert _has(r, "awaiting a sprint-placement decision") and _has(r, "ECO-73")
+    assert not _has(r, "All set")          # pending placements count as pending work
+
+
 from types import SimpleNamespace
 from emkeel.doctor import _required_contexts
 
