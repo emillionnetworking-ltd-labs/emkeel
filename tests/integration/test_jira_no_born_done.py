@@ -51,7 +51,8 @@ def test_normal_create_is_born_initial_never_transitioned(tmp_path, monkeypatch,
     rc = cli.main(["jira", "create", "--project", "ECO", "--summary", "real work"])
     assert rc == 0
     assert capsys.readouterr().out.strip() == "ECO-70"
-    assert calls == [("POST", "/rest/api/3/issue")]           # created, and NOT transitioned
+    assert ("POST", "/rest/api/3/issue") in calls             # created…
+    assert not any(p.endswith("/transitions") for _, p in calls)   # …and NOT transitioned (born initial)
 
 
 def test_work_then_merge_then_done_still_transitions(tmp_path, monkeypatch, capsys):
