@@ -7,12 +7,15 @@ from emkeel.init import (
     APPEND_LINES,
     SELF_EXEMPT_WIRING,
     Config,
+    _is_generated_skill,
     _settings_with_guard,
+    _strategy_skill,
     apply,
     connection_checklist,
     is_self_repo,
     main,
     plan,
+    self_exempt,
 )
 
 CFG = Config(jira_url="https://x.atlassian.net", jira_project="DEMO", github_repo="o/r")
@@ -346,3 +349,31 @@ def test_is_self_repo_autodetect_survives_toml_rewrite(tmp_path):
     _make_self(tmp_path)
     (tmp_path / "emkeel.toml").write_text('[github]\nrepo = "o/r"\n[emkeel]\ngenerated_with = "9.9.9"\n')  # no self marker
     assert is_self_repo(tmp_path) is True                       # still self, via pyproject
+
+
+# ── self-repo: GENERATED skills DO install (so emkeel can dogfood its own /strategy) — KEEL-107 ──
+
+def test_self_exempt_skips_hand_source_but_not_generated_skills():
+    for src in ("AGENTS.md", "CLAUDE.md", ".github/workflows/emkeel-ci.yml"):
+        assert self_exempt(src) is True                         # hand-maintained source → skipped in self repo
+    skill = ".claude/skills/strategy/SKILL.md"
+    assert _is_generated_skill(skill) is True
+    assert self_exempt(skill) is False                          # generated skill → installed, never skipped
+
+
+def test_generated_skill_rule_is_general():
+    # any future generated skill self-installs, not just /strategy
+    assert _is_generated_skill(".claude/skills/anything-new/SKILL.md") is True
+    assert _is_generated_skill(".github/workflows/emkeel-ci.yml") is False
+
+
+def test_self_repo_installs_the_generated_strategy_skill(tmp_path):
+    # THE FIX: the skill is no longer skipped in the emkeel repo — apply WRITES it so /strategy can run.
+    _make_self(tmp_path)
+    skill = ".claude/skills/strategy/SKILL.md"
+    actions = plan(tmp_path, CFG, force=True)
+    kinds = {a.path: a.kind for a in actions}
+    assert kinds[skill] != "skip-self"                         # installed, not exempted…
+    assert kinds["AGENTS.md"] == "skip-self"                   # …while hand source stays exempt
+    apply(tmp_path, CFG, force=True, dry_run=False)
+    assert (tmp_path / skill).read_text() == _strategy_skill()  # and it's the generated skill verbatim

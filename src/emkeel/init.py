@@ -125,15 +125,33 @@ def _settings_with_guard(existing: str | None) -> str | None:
 # Files emkeel MERGES into (JSON-aware, never clobbering): {path: merge_fn(existing|None)->new|None}.
 MERGE_FILES = {".claude/settings.json": _settings_with_guard}
 
-# The DISTRIBUTED wiring templates a CONSUMER gets but emkeel's OWN repo does NOT use — emkeel has bespoke
-# CI/docs (ci.yml/release.yml, its CLAUDE.md is the framework contract). Exempt only in the emkeel repo.
+# The hand-maintained SOURCE files a CONSUMER gets as distributed wiring but emkeel's OWN repo authors by
+# hand — emkeel has bespoke CI/docs (ci.yml/jira-transition.yml; its CLAUDE.md/AGENTS.md are the framework
+# contract). Overwriting these in the emkeel repo would clobber the source, so they're skipped there.
+# NOTE: this list is hand-maintained SOURCE only. GENERATED skills (no hand source) are NOT here — see
+# `_is_generated_skill` / `self_exempt`: emkeel installs the skills it generates into its own repo too.
 SELF_EXEMPT_WIRING = (
     ".github/workflows/emkeel-ci.yml",
     ".github/workflows/jira-transition.yml",
     "AGENTS.md",
     "CLAUDE.md",
-    ".claude/skills/strategy/SKILL.md",
 )
+
+
+def _is_generated_skill(rel: str) -> bool:
+    """A generated, distributable skill under `.claude/skills/` — emkeel PRODUCES it (via `_strategy_skill`
+    & friends) and keeps NO hand-maintained source to clobber. So it is installed in emkeel's OWN repo too,
+    letting emkeel dogfood the very governance it ships (e.g. run `/strategy` in the emkeel window). This is
+    the general rule: any skill emkeel generates self-installs, today `/strategy` and any future one."""
+    return rel.startswith(".claude/skills/") and rel.endswith("SKILL.md")
+
+
+def self_exempt(rel: str) -> bool:
+    """Should `rel` be SKIPPED when emkeel applies its wiring to its OWN repo? Yes for the bespoke,
+    hand-maintained source files emkeel must never clobber — but NEVER for a generated skill (it has no
+    hand source, and emkeel needs it to run its own skills). The single rule shared by the ACTION (`plan`)
+    and the DETECTION (`wiring_drift`) so they can never diverge."""
+    return rel in SELF_EXEMPT_WIRING and not _is_generated_skill(rel)
 
 
 def is_self_repo(target) -> bool:
@@ -162,8 +180,8 @@ def plan(target: Path, cfg: Config, force: bool) -> list[Action]:
     # emkeel's bespoke CI/docs (the KEEL-95 divergence that clobbered main; locked by a regression test).
     self_repo = is_self_repo(target)
     for rel in _files(cfg):
-        if self_repo and rel in SELF_EXEMPT_WIRING:
-            actions.append(Action(rel, "skip-self"))      # emkeel's own bespoke file — never written
+        if self_repo and self_exempt(rel):
+            actions.append(Action(rel, "skip-self"))      # emkeel's own bespoke source — never written
             continue
         exists = (target / rel).exists()
         actions.append(Action(rel, "create" if (force or not exists) else "skip-exists"))
