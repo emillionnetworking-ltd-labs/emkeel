@@ -1,0 +1,52 @@
+{
+  "process": "strategy",
+  "state": "presented",
+  "steps": {
+    "scaffolded": {
+      "done": true,
+      "timestamp": "2026-06-25T11:01:06Z",
+      "topic": "governance-doc-conventions"
+    },
+    "researched": {
+      "done": true,
+      "timestamp": "2026-06-25T11:04:49Z",
+      "sources": [
+        "src/emkeel/gates/check_strategy_link.py:20",
+        "src/emkeel/gates/check_acceptance_criteria.py:18-37",
+        "src/emkeel/strategy.py:43",
+        "emkeel-governance/adr/0001-adopt-and-thin.md:3",
+        "src/emkeel/gates/check_maint_scope.py:29",
+        "src/emkeel/gates/check_critical_integration.py:1",
+        "src/emkeel/init.py:286",
+        "https://raw.githubusercontent.com/adr/madr/main/template/adr-template.md",
+        "https://github.com/npryce/adr-tools/blob/master/README.md",
+        "https://lokalise.com/blog/translation-keys-naming-and-organizing/",
+        "https://gohugo.io/content-management/front-matter/"
+      ]
+    },
+    "proposed": {
+      "done": true,
+      "timestamp": "2026-06-25T11:06:51Z",
+      "options": [
+        "style-guide-only",
+        "canonical-english-inline-fields-plus-hygiene-gate",
+        "yaml-frontmatter-migration"
+      ]
+    },
+    "critiqued": {
+      "done": true,
+      "timestamp": "2026-06-25T11:09:09Z",
+      "critique": "Adversarial pass re-opened all 8 repo file:line citations + grepped for counter-evidence: 10/11 verified exact; init.py:286 was the gate-step label (run: at 295) so widened to 286-346 (resolvable range). Confirmed by grep: no ADR expresses supersession, no gate parses a non-English field, and no check_doc_conventions gate exists yet \u2014 so all three problem claims and the 'new gate' framing hold."
+    },
+    "checked": {
+      "done": true,
+      "timestamp": "2026-06-25T11:09:17Z",
+      "check_passed": true
+    },
+    "presented": {
+      "done": true,
+      "timestamp": "2026-06-25T11:09:21Z",
+      "presented_to": "operator"
+    }
+  }
+}
