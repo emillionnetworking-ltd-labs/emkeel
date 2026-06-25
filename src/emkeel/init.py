@@ -398,9 +398,11 @@ Communicate like an engineer briefing the team: short and non-repetitive, withou
    **Create the ticket first**, in the project's INITIAL state — `emkeel jira create` has no `--status`; a
    ticket is never born `Done`. If creating it fails (creds, a cross-project block) it errors red and
    stops — do NOT proceed to open a PR without a ticket. Fix the cause (`emkeel connect`) and retry.
-   When the project uses sprints, create ALWAYS recommends + applies a placement (active sprint or backlog)
-   so no ticket is orphaned — it lands in the active sprint by default; pass `--sprint backlog|<id>` to
-   choose otherwise. (Read the `::notice::` it prints.)
+   When the project uses sprints, create ALWAYS recommends a placement and leaves the ticket PENDING — it
+   does NOT auto-place it in a sprint: the ticket stays in the backlog (labeled `emkeel-placement-pending`)
+   and the OPERATOR decides the sprint. RELAY the recommendation (the `::notice::` it prints) to the
+   operator — surface it, don't swallow it — and let them choose; pass `--sprint <id>|active` to place it,
+   or leave it in the backlog. (`emkeel doctor` lists tickets still awaiting a placement decision.)
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.
 3. Every bug fix starts with a failing test (permanent regression guard).
 4. Open a PR. Merge requires: CI green + your approval + a linked ticket.

@@ -211,6 +211,19 @@ def test_agents_md_mentions_strategy(tmp_path):
     assert "Strategy:" in (tmp_path / "AGENTS.md").read_text()
 
 
+def test_agents_contract_matches_sprint_cli_operator_decides(tmp_path):
+    # KEEL-113: the contract must reflect the KEEL-111 CLI — create RECOMMENDS + leaves the ticket PENDING;
+    # the OPERATOR decides the sprint; the agent RELAYS the recommendation. Tie it to the real label so the
+    # doc and the CLI can't silently diverge again (the meta-KEEL spirit).
+    from emkeel.jira import PENDING_LABEL
+    apply(tmp_path, CFG, force=False, dry_run=False)
+    agents = (tmp_path / "AGENTS.md").read_text()
+    assert PENDING_LABEL in agents                          # tied to the actual CLI behavior/constant
+    assert "OPERATOR decides" in agents and "PENDING" in agents
+    assert "RELAY" in agents                                # the agent must surface, not swallow, the rec
+    assert "lands in the active sprint by default" not in agents   # the stale KEEL-106 auto-place text is gone
+
+
 def test_ci_includes_maint_scope_gate(tmp_path):
     apply(tmp_path, CFG, force=False, dry_run=False)
     ci = (tmp_path / ".github/workflows/emkeel-ci.yml").read_text()
