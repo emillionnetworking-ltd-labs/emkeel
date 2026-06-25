@@ -41,14 +41,18 @@ ADR-X ⇔ `Superseded-by: ADR-X` in ADR-Y, and the superseded ADR-Y's `Status` b
 "is this ADR still live?" is answered by reading the ADR itself — no forward-only dead ends.
 
 **4. The gate `check_doc_conventions`** (`src/emkeel/gates/check_doc_conventions.py`) enforces 1–3:
-- **Scans ALL ADRs** under `emkeel-governance/adr/` each run (bidirectionality is a cross-file graph
-  property; a scoped diff scan would let editing X silently break Y's backlink).
-- **Required canonical fields** present (`Status`/`Date`/`Deciders`); missing → FAIL.
-- **Status enum** checked; out-of-enum → FAIL.
-- **Banned localized keys** (`Estado:`/`Fecha:`/`Decisores:`/`Reemplaza:`/`Sustituye:`/…) → FAIL with
-  "use the canonical English field name `Status:`". This is the precise anti-recurrence rule.
-- **Bidirectional supersession** — a one-way link, a non-`superseded` target, or a missing target → FAIL.
-- **Dormant** when there is no `adr/` or it is empty. Shipped to every governed repo's CI by `emkeel init`.
+- **The language rule (1) applies to EVERY governed artifact** (KEEL-110): the gate scans every `*.md`
+  under `emkeel-governance/` recursively — adr, strategy, specs, records, and **any future artifact type or
+  subdir, covered by default** — and FAILs on a banned localized field key (`Estado:`/`Estrategia:`/…) or a
+  banned localized section heading (`## Criterios de Aceptación`/`## Alineación`) naming the canonical
+  English key. So the silent-miss can't slip into a non-ADR artifact, and generalizing never leaves a
+  per-type gap again.
+- **The structural rules (2–3) are ADR-scoped** (they are an ADR contract): **required canonical fields**
+  present (`Status`/`Date`/`Deciders`), **Status enum** checked, and **bidirectional supersession** — a
+  one-way link, a non-`superseded` target, or a missing target → FAIL. ADRs are scanned together because
+  bidirectionality is a cross-file graph property.
+- **Dormant** when there is no governance dir or it holds no docs. Shipped to every governed repo's CI by
+  `emkeel init`.
 
 ## Consequences
 
