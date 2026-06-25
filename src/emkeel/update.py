@@ -79,7 +79,7 @@ def wiring_drift(target: Path) -> list[str]:
         return []
     import subprocess
 
-    from emkeel.init import APPEND_LINES, MERGE_FILES, SELF_EXEMPT_WIRING, _files, is_self_repo
+    from emkeel.init import APPEND_LINES, MERGE_FILES, _files, is_self_repo, self_exempt
     default = _origin_default(target)
     self_repo = is_self_repo(target)   # emkeel's OWN repo doesn't use the distributed CI/docs templates
 
@@ -95,8 +95,8 @@ def wiring_drift(target: Path) -> list[str]:
     for path, content in _files(cfg).items():
         if path == "emkeel.toml":
             continue
-        if self_repo and path in SELF_EXEMPT_WIRING:
-            continue                       # emkeel's bespoke CI/docs — not the distributed template
+        if self_repo and self_exempt(path):
+            continue                       # emkeel's bespoke hand-maintained source — not a template/skill
         committed = _origin_or_local(path)
         if default:
             if (committed or "") != content:
