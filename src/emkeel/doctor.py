@@ -88,7 +88,8 @@ def gather(target: Path) -> dict:
     st = {"governed": (target / "emkeel.toml").is_file(), "repo": "", "connected": False,
           "gh_ok": False, "secrets_ok": None, "protection_ok": None, "default_branch": "main",
           "drift": [], "jira_project": "", "branch_key": "", "required_checks": ["gates"],
-          "required_missing": [], "maint_pr": None, "env_scoped_ok": None, "pending_placements": []}
+          "required_missing": [], "maint_pr": None, "maint_pr_health": None, "env_scoped_ok": None,
+          "pending_placements": []}
     if st["governed"]:
         from emkeel.update import load_cfg, origin_jira_project, wiring_drift
         st["drift"] = wiring_drift(target)   # generated files that `emkeel update` would refresh
@@ -124,8 +125,10 @@ def gather(target: Path) -> dict:
     if sl.returncode == 0:
         st["secrets_ok"] = all(k in sl.stdout for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"))
     if st["drift"]:                       # a refresh may already be shipped + waiting on auto-merge
-        from emkeel.ship import inflight_maint_pr
+        from emkeel.ship import inflight_maint_pr, maint_pr_status
         st["maint_pr"] = inflight_maint_pr(st["repo"], _run)
+        if st["maint_pr"]:                # …and it may be STUCK (stale/failing) — surface it, never silent
+            st["maint_pr_health"] = maint_pr_status(st["repo"], st["maint_pr"], _run).get("health")
     enforced = _required_contexts(st["repo"], st["default_branch"])
     if enforced is None:                 # branch protection couldn't be read — leave as '?', don't fail
         st["protection_ok"] = None
@@ -148,7 +151,10 @@ def report_lines(st: dict) -> list[str]:
                + ("" if st.get("governed") else "   → run: emkeel setup"))
     if st.get("governed") and st.get("drift"):
         pr = st.get("maint_pr")
-        if pr:
+        if pr and st.get("maint_pr_health") in ("failing", "behind"):
+            out.append(f"  ⚠ maint PR #{pr} is stuck ({st['maint_pr_health']}) — its CI ran against an older "
+                       "main.   → run: emkeel update   (refreshes it against current main; it merges when green)")
+        elif pr:
             out.append(f"  ⚠ {len(st['drift'])} wiring file(s) out of date — refresh in flight (PR #{pr}); "
                        "will be clean after it merges + `git pull`.")
         else:
@@ -202,6 +208,8 @@ def report_lines(st: dict) -> list[str]:
         pending.append("drift")
     if st.get("governed") and st.get("env_scoped_ok") is False:
         pending.append("env")
+    if st.get("maint_pr") and st.get("maint_pr_health") in ("failing", "behind"):
+        pending.append("maint-pr")          # a stuck refresh PR is pending work, not "all set"
     if st.get("pending_placements"):
         pending.append("placement")
     out.append("")
