@@ -201,6 +201,7 @@ def test_cli_create_lands_in_initial_state(monkeypatch, capsys):
     monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "ECO-50"))
     monkeypatch.setattr(J, "transition_issue",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("create must not transition")))
+    monkeypatch.setattr(J, "_place_after_create", lambda *a: None)   # sprint placement tested separately
     assert J.main(["create", "--project", "ECO", "--summary", "x"]) == 0
     assert capsys.readouterr().out.strip() == "ECO-50"
 
@@ -298,3 +299,92 @@ def test_create_hard_fails_without_any_creds(tmp_path, monkeypatch, capsys):
 def test_scoped_env_values_is_failsafe_when_ungoverned(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)                                   # no emkeel.toml → no identity
     assert J._scoped_env_values() == {}                          # never raises, empty
+
+
+# ── sprint placement (KEEL-106): always recommend + always place, never silent ──
+
+def _agile_caller(*, board="scrum", active=True, place_ok=True, calls=None):
+    """A fake Jira Agile caller. board='scrum'|'kanban'|'none'(unreachable); active toggles a running
+    sprint; place_ok toggles the add-to-sprint/backlog result. Records (method, path) in `calls`."""
+    def caller(method, path, body=None):
+        if calls is not None:
+            calls.append((method, path))
+        if method == "GET" and path.startswith("/rest/agile/1.0/board?"):
+            if board == "none":
+                return 503, {}
+            if board == "kanban":
+                return 200, {"values": []}
+            return 200, {"values": [{"id": 7, "type": "scrum"}]}
+        if method == "GET" and "/sprint?state=active" in path:
+            return 200, {"values": ([{"id": 42, "name": "Sprint 9"}] if active else [])}
+        if method == "POST" and ("/sprint/" in path or path.endswith("/backlog/issue")):
+            return (204 if place_ok else 403), {}
+        return 200, {}
+    return caller
+
+
+def test_recommend_active_sprint_when_running():
+    rec = J.recommend_placement("ECO", caller=_agile_caller(active=True))
+    assert rec.kind == "active_sprint" and rec.sprint_id == 42 and rec.sprint_name == "Sprint 9"
+
+
+def test_recommend_backlog_when_no_active_sprint():
+    rec = J.recommend_placement("ECO", caller=_agile_caller(active=False))
+    assert rec.kind == "backlog"
+
+
+def test_recommend_none_on_kanban():
+    rec = J.recommend_placement("ECO", caller=_agile_caller(board="kanban"))
+    assert rec.kind == "none"
+
+
+def test_recommend_indeterminate_when_agile_unreachable():
+    rec = J.recommend_placement("ECO", caller=_agile_caller(board="none"))
+    assert rec.kind == "indeterminate"
+
+
+def test_place_issue_adds_to_active_sprint():
+    calls = []
+    rec = J.Placement("active_sprint", "x", sprint_id=42, sprint_name="Sprint 9")
+    ok, msg = J.place_issue("ECO-1", rec, caller=_agile_caller(calls=calls))
+    assert ok and ("POST", "/rest/agile/1.0/sprint/42/issue") in calls
+
+
+def test_place_issue_moves_to_backlog():
+    calls = []
+    ok, _ = J.place_issue("ECO-1", J.Placement("backlog", "x"), caller=_agile_caller(calls=calls))
+    assert ok and ("POST", "/rest/agile/1.0/backlog/issue") in calls
+
+
+def test_resolve_placement_override_backlog():
+    rec = J.Placement("active_sprint", "x", sprint_id=42, sprint_name="S9")
+    out = J._resolve_placement("backlog", rec, "ECO", caller=_agile_caller())
+    assert out.kind == "backlog"
+
+
+def test_create_places_in_active_sprint_and_surfaces_recommendation(monkeypatch, capsys):
+    # the invariant on the agent path: create (no --sprint) → recommendation surfaced + placed in the sprint.
+    monkeypatch.setattr(J, "find_identity", lambda p: None)
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "ECO-90"))
+    calls = []
+    monkeypatch.setattr(J, "_default_caller", lambda: _agile_caller(active=True, calls=calls))
+    assert J.main(["create", "--project", "ECO", "--summary", "work"]) == 0
+    out, err = capsys.readouterr()
+    assert out.strip() == "ECO-90"                                  # stdout stays scriptable (just the key)
+    assert "recommended placement" in err and "Sprint 9" in err     # recommendation ALWAYS surfaced
+    assert ("POST", "/rest/agile/1.0/sprint/42/issue") in calls     # and a placement ALWAYS applied
+
+
+def test_create_on_kanban_skips_placement(monkeypatch, capsys):
+    monkeypatch.setattr(J, "find_identity", lambda p: None)
+    for k in ("JIRA_BASE_URL", "JIRA_EMAIL", "JIRA_TOKEN"):
+        monkeypatch.setenv(k, "x")
+    monkeypatch.setattr(J, "create_issue", lambda *a, **k: (True, "ECO-91"))
+    calls = []
+    monkeypatch.setattr(J, "_default_caller", lambda: _agile_caller(board="kanban", calls=calls))
+    assert J.main(["create", "--project", "ECO", "--summary", "work"]) == 0
+    out, err = capsys.readouterr()
+    assert out.strip() == "ECO-91" and "recommended" not in err     # Kanban → N/A, no sprint noise
+    assert not any("/sprint/" in p for _, p in calls)
