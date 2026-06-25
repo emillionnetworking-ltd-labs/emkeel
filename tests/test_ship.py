@@ -135,8 +135,9 @@ def _seeded_with_remote(tmp_path):
     return origin, work
 
 
-def _inflight_run(calls, *, rollup, merge_state="CLEAN", rerun_rc=0):
-    """Fake gh: a maint PR #42 is in flight; `gh pr view` reports `rollup` + `merge_state`."""
+def _inflight_run(calls, *, rollup, merge_state="CLEAN", rerun_rc=0, update_rc=1, update_msg="up to date"):
+    """Fake gh: a maint PR #42 is in flight; `gh pr view` reports `rollup` + `merge_state`. `update-branch`
+    returns `update_rc` (0 = refreshed; non-0 with `update_msg`)."""
     import json as _json
 
     def run(args, stdin=None, timeout=None, capture=True):
@@ -145,6 +146,9 @@ def _inflight_run(calls, *, rollup, merge_state="CLEAN", rerun_rc=0):
             j = " ".join(args)
             if "auth status" in j:
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
+            if "update-branch" in j:
+                return SimpleNamespace(returncode=update_rc, stdout="",
+                                       stderr="" if update_rc == 0 else update_msg)
             if "pr list" in j:
                 return SimpleNamespace(returncode=0,
                                        stdout='[{"number": 42, "headRefName": "emkeel-maint/0.1.73-xy"}]', stderr="")
@@ -162,8 +166,8 @@ def _inflight_run(calls, *, rollup, merge_state="CLEAN", rerun_rc=0):
 
 
 def test_ship_update_recovers_stuck_pr_by_rerunning_ci(tmp_path, capsys):
-    """THE BUG: a maint PR in flight whose CI FAILED must be recovered from the CLI (re-run its failed
-    checks), not dead-ended with 'Already shipped … nothing re-pushed'."""
+    """A maint PR failing on its OWN merits (branch current) is recovered by re-running its failed checks,
+    not dead-ended. update-branch reports 'up to date' → fall through to the CI rerun."""
     origin, work = _seeded_with_remote(tmp_path)
     calls = []
     run = _inflight_run(calls, rollup=[{"name": "gates", "status": "COMPLETED", "conclusion": "FAILURE"}])
@@ -172,6 +176,21 @@ def test_ship_update_recovers_stuck_pr_by_rerunning_ci(tmp_path, capsys):
     assert any("run rerun 999" in c and "--failed" in c for c in calls)   # re-triggered the failed CI
     assert "stuck" in out.lower() and "#42" in out
     assert not any("pr create" in c for c in calls)                        # recovered in place, not re-shipped
+
+
+def test_ship_update_refreshes_a_stale_failing_pr(tmp_path, capsys):
+    """THE #467 BUG: a maint PR that's BEHIND main and therefore FAILING the new gates must be REFRESHED
+    against current main (not re-run on the stale branch forever, not dead-ended)."""
+    origin, work = _seeded_with_remote(tmp_path)
+    calls = []
+    run = _inflight_run(calls, rollup=[{"name": "gates", "status": "COMPLETED", "conclusion": "FAILURE"}],
+                        merge_state="BEHIND", update_rc=0)                  # behind + failing; refresh succeeds
+    assert ship_update(target=work, run=run) == 0
+    out = capsys.readouterr().out
+    assert any("update-branch" in c for c in calls)                        # refreshed against current main
+    assert "refreshed" in out.lower() and "#42" in out
+    assert not any("run rerun" in c for c in calls)                        # NOT re-run on the stale branch
+    assert not any("pr create" in c for c in calls)                        # NOT re-shipped (no duplicate)
 
 
 def test_ship_update_waits_when_inflight_pr_is_healthy(tmp_path, capsys):
@@ -184,15 +203,27 @@ def test_ship_update_waits_when_inflight_pr_is_healthy(tmp_path, capsys):
     assert not any("run rerun" in c for c in calls)                        # healthy → nothing to recover
 
 
-def test_ship_update_recreates_when_pr_behind(tmp_path, capsys):
+def test_ship_update_refreshes_when_pr_behind(tmp_path, capsys):
     origin, work = _seeded_with_remote(tmp_path)
     calls = []
-    # behind base, no failing checks → close it and re-ship a fresh PR on current main.
+    # behind base → refresh it against main (its CI re-runs); no close, no duplicate PR.
     run = _inflight_run(calls, rollup=[{"name": "gates", "status": "COMPLETED", "conclusion": "SUCCESS"}],
-                        merge_state="BEHIND")
+                        merge_state="BEHIND", update_rc=0)
     assert ship_update(target=work, run=run) == 0
     joined = "\n".join(calls)
-    assert "pr close 42" in joined and "pr create" in joined               # closed the stuck one, re-shipped
+    assert "update-branch" in joined and "refreshed" in capsys.readouterr().out.lower()
+    assert "pr close 42" not in joined and "pr create" not in joined       # refreshed in place
+
+
+def test_ship_update_recreates_when_pr_conflicts(tmp_path, capsys):
+    origin, work = _seeded_with_remote(tmp_path)
+    calls = []
+    # behind + can't auto-refresh (conflict) → close it and re-ship a fresh PR on current main.
+    run = _inflight_run(calls, rollup=[{"name": "gates", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+                        merge_state="BEHIND", update_rc=1, update_msg="merge conflict")
+    assert ship_update(target=work, run=run) == 0
+    joined = "\n".join(calls)
+    assert "pr close 42" in joined and "pr create" in joined               # closed the conflicting one, re-shipped
 
 
 def test_ship_update_inflight_health_unknown_degrades_to_wait(tmp_path, capsys):
@@ -257,10 +288,14 @@ def test_maint_pr_status_unknown_on_error_and_bad_json():
     assert maint_pr_status("o/r", 42, run=_gh_view([], stdout="not json"))["health"] == "unknown"
 
 
-def _recover_run(calls, *, rid="999", rerun_rc=0):
+def _recover_run(calls, *, rid="999", rerun_rc=0, update_rc=1, update_msg="up to date"):
+    """Fake gh for recover_maint_pr. `update-branch` returns `update_rc` (0 = refreshed; non-0 + `update_msg`
+    classifies as conflict/current/error)."""
     def run(args, **k):
         j = " ".join(str(a) for a in args)
         calls.append(j)
+        if "update-branch" in j:
+            return SimpleNamespace(returncode=update_rc, stdout="", stderr="" if update_rc == 0 else update_msg)
         if "run list" in j:
             return SimpleNamespace(returncode=0, stdout=rid, stderr="")
         if "run rerun" in j:
@@ -269,13 +304,47 @@ def _recover_run(calls, *, rid="999", rerun_rc=0):
     return run
 
 
-def test_recover_behind_closes_and_recreates():
+# ── refresh_branch (the heal primitive) ────────────────────────────────────────
+from emkeel.ship import refresh_branch
+
+
+def _gh_rc(rc, msg=""):
+    return lambda args, **k: SimpleNamespace(returncode=rc, stdout="", stderr=msg)
+
+
+def test_refresh_branch_outcomes():
+    assert refresh_branch("o/r", 42, run=_gh_rc(0)) == "refreshed"
+    assert refresh_branch("o/r", 42, run=_gh_rc(1, "merge conflict between base and head")) == "conflict"
+    assert refresh_branch("o/r", 42, run=_gh_rc(1, "The branch is already up to date")) == "current"
+    assert refresh_branch("o/r", 42, run=_gh_rc(1, "gh: API rate limit")) == "error"
+
+
+# ── recover_maint_pr: refresh FIRST, then fall back ────────────────────────────
+
+def test_recover_behind_refreshes_in_place():
     calls = []
-    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "behind", run=_recover_run(calls))
-    assert mode == "recreate" and "pr close 42" in "\n".join(calls) and "behind" in msg
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "behind", run=_recover_run(calls, update_rc=0))
+    assert mode == "wait" and "update-branch" in "\n".join(calls) and "refreshed" in msg
+    assert "pr close 42" not in "\n".join(calls)
 
 
-def test_recover_failing_reruns_and_waits():
+def test_recover_stale_failing_pr_is_refreshed_not_rerun():
+    # THE #467 FIX: a 'failing' PR that's failing because it's behind → refresh, don't rerun stale CI.
+    calls = []
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "failing", run=_recover_run(calls, update_rc=0))
+    assert mode == "wait" and "refreshed" in msg
+    assert not any("run rerun" in c for c in calls)               # never re-ran the stale branch
+
+
+def test_recover_conflict_closes_and_recreates():
+    calls = []
+    mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "behind",
+                                 run=_recover_run(calls, update_rc=1, update_msg="merge conflict"))
+    assert mode == "recreate" and "pr close 42" in "\n".join(calls) and "conflict" in msg
+
+
+def test_recover_failing_when_current_reruns_and_waits():
+    # branch up to date with main, but its CI failed → re-run the failed jobs (genuine failure).
     calls = []
     mode, msg = recover_maint_pr("o/r", 42, "emkeel-maint/x", "failing", run=_recover_run(calls))
     assert mode == "wait"

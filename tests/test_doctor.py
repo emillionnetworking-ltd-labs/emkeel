@@ -38,6 +38,22 @@ def test_pending_lists_gaps_with_links():
     assert _has(r, "pending")
 
 
+def test_surfaces_a_stuck_maint_pr_with_the_heal_command():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "drift": ["AGENTS.md"], "maint_pr": 467, "maint_pr_health": "failing"})
+    assert _has(r, "#467") and _has(r, "stuck")
+    assert _has(r, "emkeel update")            # the single command to heal it
+    assert not _has(r, "All set")
+
+
+def test_healthy_maint_pr_is_in_flight_not_stuck():
+    r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
+                      "secrets_ok": True, "protection_ok": True,
+                      "drift": ["AGENTS.md"], "maint_pr": 99, "maint_pr_health": "healthy"})
+    assert _has(r, "refresh in flight") and not _has(r, "stuck")
+
+
 def test_nudges_pending_sprint_placements():
     r = report_lines({"governed": True, "connected": True, "repo": "a/b", "gh_ok": True,
                       "secrets_ok": True, "protection_ok": True,

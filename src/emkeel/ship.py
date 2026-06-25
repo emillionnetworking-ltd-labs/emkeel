@@ -72,26 +72,57 @@ def maint_pr_status(repo: str, number: int, run=connect._run) -> dict:
     return {"health": "healthy", "branch": branch}
 
 
+def refresh_branch(repo: str, number: int, run=connect._run) -> str:
+    """Merge the base (main) into the PR branch via GitHub's `update-branch`, so its CI re-runs against the
+    CURRENT main. Returns one of:
+      - "refreshed": the branch was behind and is now being updated (its CI will re-run).
+      - "current":   the branch is already up to date with main (nothing to do).
+      - "conflict":  the branch conflicts with main and can't be auto-updated (→ recreate).
+      - "error":     update-branch couldn't be reached (degrade gracefully — caller falls back).
+    Idempotent: re-running it when already current is a harmless "current"."""
+    r = run(["gh", "api", "-X", "PUT", f"repos/{repo}/pulls/{number}/update-branch",
+             "-H", "Accept: application/vnd.github+json"])
+    if r.returncode == 0:
+        return "refreshed"
+    msg = (r.stderr or r.stdout or "").lower()
+    if "conflict" in msg:
+        return "conflict"
+    # update-branch answers 422 when the head is already up to date with the base.
+    if "up to date" in msg or "up-to-date" in msg or "not ahead" in msg or "no new commits" in msg:
+        return "current"
+    return "error"
+
+
 def recover_maint_pr(repo: str, number: int, branch: str, health: str, run=connect._run) -> tuple[str, str]:
     """Unstick a maint PR from the CLI. Returns (mode, message):
-      - "wait":     recovered in place (re-ran failed CI) — caller keeps waiting for it to merge.
+      - "wait":     recovered in place (refreshed against main, or re-ran failed CI) — keep waiting.
       - "recreate": closed the dead PR — caller should ship a fresh one on current main.
-    """
-    if health == "behind":
+
+    A maint branch that forked before a migration fails the NEW gates forever if we only re-run its CI on
+    the stale branch (the #467 trap). So FIRST refresh it with current main — that heals a PR that's behind,
+    OR failing *because* it's behind. Re-running `emkeel update` repeats this idempotently."""
+    outcome = refresh_branch(repo, number, run)
+    if outcome == "refreshed":
+        return "wait", (f"  PR #{number} was behind main — refreshed it (merged current main in); its CI "
+                        "re-runs against the latest state and it merges when green.")
+    if outcome == "conflict":
         run(["gh", "pr", "close", str(number), "-R", repo, "--delete-branch"])
-        return "recreate", (f"  PR #{number} was behind the base — closed it; re-shipping fresh on "
+        return "recreate", (f"  PR #{number} conflicts with main — closed it; re-shipping a fresh one on "
                             "current main (it'll merge when the gates pass).")
-    # "failing": re-trigger the failed jobs of its latest failed run.
+    # "current"/"error": the branch is already up to date with main (or update-branch was unreachable).
+    if health == "behind":                       # behind but couldn't refresh → just keep waiting on its CI
+        return "wait", f"  PR #{number} is up to date with main — waiting for its CI to settle."
+    # health == "failing" and the branch is current → a genuine failure: re-run its failed jobs.
     rl = run(["gh", "run", "list", "-R", repo, "--branch", branch, "--status", "failure",
               "--limit", "1", "--json", "databaseId", "--jq", ".[0].databaseId"])
     rid = (rl.stdout or "").strip()
     if not rid:
-        return "wait", (f"  PR #{number} stuck (CI failed) but no failed run was found to rerun — "
-                        "check it manually.")
+        return "wait", (f"  PR #{number} stuck (CI failed, branch current) — no failed run was found to "
+                        "rerun; check it manually.")
     rr = run(["gh", "run", "rerun", rid, "-R", repo, "--failed"])
     if rr.returncode == 0:
-        return "wait", (f"  PR #{number} stuck (CI failed) — re-ran its failed checks (run {rid}); "
-                        "it'll merge when green.")
+        return "wait", (f"  PR #{number} stuck (CI failed, branch current) — re-ran its failed checks "
+                        f"(run {rid}); it'll merge when green.")
     return "wait", (f"  PR #{number} stuck (CI failed) — couldn't rerun ({(rr.stderr or rr.stdout).strip()}); "
                     "check it manually.")
 
