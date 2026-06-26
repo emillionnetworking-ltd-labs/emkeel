@@ -323,6 +323,44 @@ def pending_placements(project: str, *, caller=None) -> list[str]:
     return [i.get("key") for i in (data.get("issues") or []) if i.get("key")]
 
 
+def _sprint_field_id(caller) -> str | None:
+    """The id of the custom 'Sprint' field (varies per Jira instance) — discovered, never hardcoded."""
+    st, data = caller("GET", "/rest/api/3/field")
+    if st != 200 or not isinstance(data, list):
+        return None
+    for f in data:
+        if isinstance(f, dict) and f.get("name", "").lower() == "sprint" and f.get("custom"):
+            return f.get("id")
+    return None
+
+
+def issue_placement_state(key: str, *, caller=None) -> tuple[int, dict | None]:
+    """(http_status, {pending_label, in_sprint, done}) — the deterministic facts the placed-gate needs.
+    `pending_label` = still carries the `emkeel-placement-pending` label (emkeel flagged it as undecided);
+    `in_sprint` = the Sprint field is non-empty (placed in a sprint, however it got there); `done` = the
+    issue's status category is Done. None on a non-200 read."""
+    caller = caller or _default_caller()
+    fid = _sprint_field_id(caller)
+    names = ["labels", "status"] + ([fid] if fid else [])
+    st, data = caller("GET", f"/rest/api/3/issue/{key}?fields={','.join(names)}")
+    if st != 200 or not isinstance(data, dict):
+        return st, None
+    f = data.get("fields", {}) or {}
+    cat = ((f.get("status") or {}).get("statusCategory") or {}).get("key")
+    return st, {
+        "pending_label": PENDING_LABEL in (f.get("labels") or []),
+        "in_sprint": bool(f.get(fid)) if fid else False,
+        "done": cat == "done",
+    }
+
+
+def _unmark_pending(key: str, *, caller=None) -> bool:
+    """Remove the pending label — the placement decision has been made (to a sprint OR consciously backlog)."""
+    caller = caller or _default_caller()
+    st, _ = caller("PUT", f"/rest/api/3/issue/{key}", {"update": {"labels": [{"remove": PENDING_LABEL}]}})
+    return st in (200, 204)
+
+
 def _place_after_create(key: str, project: str, choice: str | None) -> None:
     """No-orphan, operator-decides: when the project uses sprints, ALWAYS surface the recommendation. By
     DEFAULT (no `--sprint`) do NOT auto-add to a sprint — leave the ticket in the backlog labeled pending
@@ -451,10 +489,44 @@ def _main_transition(argv: list[str]) -> int:
     return 0 if ok else 1
 
 
+def _main_place(rest: list[str]) -> int:
+    """`emkeel jira place <key> [--sprint active|backlog|<id>]` — the operator DECIDES a pending ticket's
+    placement and clears the pending flag. The resolve path for `check_ticket_placed`: it blocks the merge
+    while a sprint-project ticket is still undecided, this is how you decide it from the console."""
+    ap = argparse.ArgumentParser(prog="emkeel jira place",
+                                 description="Decide a ticket's sprint placement (clears the pending flag).")
+    ap.add_argument("key")
+    ap.add_argument("--sprint", default="active", help="active | backlog | <sprintId> (default: active)")
+    ns = ap.parse_args(rest)
+    project = ns.key.split("-")[0]
+    blocked = _isolation_block_project(project)
+    if blocked:
+        print(f"::error::{blocked}", file=sys.stderr)
+        return 1
+    if not secrets_present():
+        print("::error::Cannot place — no Jira creds (run `emkeel connect`).", file=sys.stderr)
+        return 1
+    caller = _default_caller()
+    rec = recommend_placement(project, caller=caller)
+    if rec.kind == "none":
+        print(f"{ns.key}: project is Kanban — no sprint placement applies.")
+        return 0
+    if rec.kind == "indeterminate":
+        print(f"::warning::{ns.key}: {rec.rationale} — could not place.", file=sys.stderr)
+        return 1
+    target = _resolve_placement(ns.sprint, rec, project, caller=caller)
+    ok, msg = place_issue(ns.key, target, caller=caller)
+    _unmark_pending(ns.key, caller=caller)          # the decision is made → clear the pending flag
+    print((msg if ok else f"::warning::{msg}"), file=(sys.stdout if ok else sys.stderr))
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     if argv and argv[0] == "create":
         return _main_create(argv[1:])
+    if argv and argv[0] == "place":
+        return _main_place(argv[1:])
     return _main_transition(argv)
 
 

@@ -304,6 +304,16 @@ jobs:
           JIRA_EMAIL: ${{{{ secrets.JIRA_EMAIL }}}}
           JIRA_TOKEN: ${{{{ secrets.JIRA_TOKEN }}}}
         run: python -m emkeel.gates.check_ticket_precedes_work
+      - name: "Gate - ticket placed (decide the sprint before merge)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
+          EMKEEL_PR_TITLE: ${{{{ github.event.pull_request.title }}}}
+          # Blocks merge while a sprint-project ticket is still pending a placement decision. Secrets absent -> inconclusive.
+          JIRA_BASE_URL: ${{{{ secrets.JIRA_BASE_URL }}}}
+          JIRA_EMAIL: ${{{{ secrets.JIRA_EMAIL }}}}
+          JIRA_TOKEN: ${{{{ secrets.JIRA_TOKEN }}}}
+        run: python -m emkeel.gates.check_ticket_placed
       - name: "Gate - maintenance scope (emkeel-maint lane only)"
         if: github.event_name == 'pull_request'
         env:
@@ -417,7 +427,9 @@ Communicate like an engineer briefing the team: short and non-repetitive, withou
    does NOT auto-place it in a sprint: the ticket stays in the backlog (labeled `emkeel-placement-pending`)
    and the OPERATOR decides the sprint. RELAY the recommendation (the `::notice::` it prints) to the
    operator — surface it, don't swallow it — and let them choose; pass `--sprint <id>|active` to place it,
-   or leave it in the backlog. (`emkeel doctor` lists tickets still awaiting a placement decision.)
+   or leave it in the backlog. The decision is not optional: `check_ticket_placed` BLOCKS the merge while a
+   sprint-project ticket is still undecided. Decide it with `emkeel jira place <KEY> --sprint active|backlog|<id>`
+   (it clears the pending flag), or place it in Jira. (`emkeel doctor` lists tickets still awaiting a decision.)
 2. For `feat/` tickets: write `emkeel-governance/specs/<KEY>.md` with an "Acceptance Criteria" section.
 3. Every bug fix starts with a failing test (permanent regression guard).
 4. Open a PR. Merge requires: CI green + your approval + a linked ticket.

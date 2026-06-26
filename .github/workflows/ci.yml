@@ -44,6 +44,17 @@ jobs:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: python -m emkeel.gates.check_ticket_precedes_work
 
+      - name: "Gate — ticket placed (decide the sprint before merge)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+          # Blocks merge while a sprint-project ticket is still pending a placement decision. Secrets absent → inconclusive.
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: python -m emkeel.gates.check_ticket_placed
+
       # Gate: la via de mantenimiento emkeel-maint/ solo puede tocar ficheros de Emkeel.
       - name: "Gate — maintenance scope"
         if: github.event_name == 'pull_request'
