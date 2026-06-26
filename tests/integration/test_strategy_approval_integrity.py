@@ -11,6 +11,9 @@ from emkeel.strategy import strategy_process
 
 SDIR = "emkeel-governance/strategy"
 TS = "2026-06-23T00:00:00Z"
+KC = ["the pilot rejects it", "worse than the baseline"]
+REALITY = {"case": "ECO-71", "method": "applied to one real case",
+           "outcome": "pass", "evidence_ref": "https://example.com/pilot"}
 
 
 def _drive(p, *steps):
@@ -35,11 +38,12 @@ def _scaffold(tmp_path, topic="satellites"):
 def test_forged_approved_fails_the_gate(tmp_path, monkeypatch, capsys):
     p = _scaffold(tmp_path)
     _drive(p,
-           ("scaffolded", {"topic": "satellites"}),
+           ("scaffolded", {"topic": "satellites", "kill_criteria": KC}),
            ("researched", {"sources": ["https://nist.gov/x"]}),
            ("proposed", {"options": ["a", "b"]}),
            ("critiqued", {"critique": "x"}),
            ("checked", {"check_passed": True}),
+           ("validated", REALITY),
            ("presented", {"presented_to": "operador"}),
            ("approved", {"approved_by": "operador"}))     # forged: no human actually approved
     assert step_done(read_state(p), "approved")            # the file claims approval…
@@ -51,20 +55,22 @@ def test_refinement_resets_a_prior_approval_then_passes_at_presented(tmp_path, m
     p = _scaffold(tmp_path)
     # a prior refinement was fully approved (e.g. ECO-64)…
     _drive(p,
-           ("scaffolded", {"topic": "satellites"}),
+           ("scaffolded", {"topic": "satellites", "kill_criteria": KC}),
            ("researched", {"internal_only": True}),
            ("proposed", {"options": ["a", "b"]}),
            ("critiqued", {"critique": "x"}),
            ("checked", {"check_passed": True}),
+           ("validated", REALITY),
            ("presented", {"presented_to": "op"}),
            ("approved", {"approved_by": "op"}))
     # …a NEW refinement re-runs from scaffolded → the engine resets; approved does NOT carry over.
     _drive(p,
-           ("scaffolded", {"topic": "satellites"}),
+           ("scaffolded", {"topic": "satellites", "kill_criteria": KC}),
            ("researched", {"sources": ["https://fidoalliance.org/specs/"]}),
            ("proposed", {"options": ["c", "d"]}),
            ("critiqued", {"critique": "fresh adversarial pass"}),
            ("checked", {"check_passed": True}),
+           ("validated", REALITY),
            ("presented", {"presented_to": "op"}))
     assert not step_done(read_state(p), "approved")        # the prior approval is gone
     assert _run_gate(tmp_path, monkeypatch, [f"{SDIR}/satellites.md"]) == 0   # clean, at presented → OK

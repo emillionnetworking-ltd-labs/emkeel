@@ -298,17 +298,46 @@ def _check_passed(fields: dict) -> tuple[bool, str]:
     return False, "requires `check_passed=true` (run `emkeel strategy check` and record its pass)"
 
 
+# The reality outcome is a CLOSED enum: the human records whether the strategy, applied to a real case,
+# passed — `mixed` and `fail` are valid, HONEST records, not gate failures. The gate checks the value is one
+# of these, never that it is `pass` (judging "good" is the human's job at approval — the KEEL-104 pattern).
+REALITY_OUTCOMES = ("pass", "fail", "mixed")
+
+
+def _reality_validated(fields: dict) -> tuple[bool, str]:
+    """`validated` gate: the strategy was applied to ONE real case and the outcome recorded. Deterministic
+    STRUCTURE only — it never judges whether the outcome is 'good'. `evidence_ref` is treated like an option
+    Source: a URL must be well-formed; a repo `file:line` or an external citation passes here and the CI gate
+    re-resolves a repo ref against the repo root (this predicate has no root at advance time, mirroring how
+    `researched` provenance is intent-checked here and resolved by `strategy check`)."""
+    outcome = str(fields.get("outcome", "")).strip().lower()
+    if outcome not in REALITY_OUTCOMES:
+        return False, f"`outcome` must be one of {list(REALITY_OUTCOMES)} — the recorded reality result"
+    ref = str(fields.get("evidence_ref", "")).strip()
+    if ref.lower() in _PLACEHOLDERS:
+        return False, "requires `evidence_ref` — a resolvable proof (repo file:line, URL, or external citation)"
+    if classify_source(ref) == "url":
+        prob = _url_problem(ref)
+        if prob:
+            return False, f"`evidence_ref` {ref!r}: {prob}"
+    return True, ""
+
+
 def strategy_process() -> "ProcessSchema":
     """The /strategy process schema: scaffolded → researched → proposed → critiqued → checked →
-    presented(human gate shown) → approved(human gate recorded). Declared as data — the generic engine
-    in `emkeel.process` enforces the ordering + evidence; nothing here is engine-specific."""
+    validated(reality evidence) → presented(human gate shown) → approved(human gate recorded). Declared as
+    data — the generic engine in `emkeel.process` enforces the ordering + evidence; nothing here is
+    engine-specific. The `validated` step is the reality bar: a strategy can pass every process step and
+    still be wrong, so it must record the outcome of being applied to a real case before it can be approved."""
     from emkeel.process import ProcessSchema, Step
     return ProcessSchema("strategy", (
-        Step("scaffolded", requires=("topic",)),
+        Step("scaffolded", requires=("topic", "kill_criteria")),  # + the conditions to ABANDON it, up front
         Step("researched", validate=_researched_provenance),
         Step("proposed", requires=("options",)),          # ≥2 real options recorded
         Step("critiqued", requires=("critique",)),        # adversarial pass recorded
         Step("checked", requires=("check_passed",), validate=_check_passed),
+        Step("validated", requires=("case", "method", "outcome", "evidence_ref"),
+             validate=_reality_validated),                # REALITY bar: tried on a real case, outcome on record
         Step("presented", requires=("presented_to",)),    # shown to the human (the gate)
         Step("approved", requires=("approved_by",)),      # human decision recorded — the hard gate
     ))

@@ -37,7 +37,7 @@ def test_self_repo_gets_a_runnable_strategy_skill_and_engine(tmp_path):
 
     # 3) the ENGINE the skill drives works on this repo: a non-skippable step actually advances on disk.
     (tmp_path / "emkeel-governance/strategy").mkdir(parents=True, exist_ok=True)
-    assert _do_advance("scaffolded", "auth", ["topic=auth"], tmp_path) == 0
+    assert _do_advance("scaffolded", "auth", ["topic=auth", "kill_criteria=[worse,rejected]"], tmp_path) == 0
     state = read_state(tmp_path / "emkeel-governance/strategy/auth.process.json")
     assert step_done(state, "scaffolded")
 
