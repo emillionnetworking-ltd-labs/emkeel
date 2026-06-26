@@ -8,6 +8,10 @@ When a PR touches `emkeel-governance/strategy/<topic>.md`, the matching `<topic>
 committed, have reached at least `checked` (every step up to it done), and its `researched` step MUST
 carry provenance (a real source — URL / repo file:line — or an explicit `internal_only=true`). Otherwise
 FAIL. N/A when the diff touches no strategy doc. Needs `fetch-depth: 0` for the base diff.
+
+RETIRO: a strategy is removed by DELETING its `<topic>.md` AND its `<topic>.process.json` together, as a
+pair. A clean retiro (both gone) is OK — a governed process can be ended, not only completed. But a doc
+deleted while its sidecar survives is an orphan (a process with no doc) → FAIL; retire the pair.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-from emkeel.gates.check_maint_scope import changed_files
+from emkeel.gates.check_maint_scope import changed_files, deleted_files
 from emkeel.process import StateParseError, read_state, step_done
 from emkeel.strategy import (STRATEGY_DIR, _reality_validated, _repo_problem, _researched_provenance,
                             classify_source, strategy_process)
@@ -51,9 +55,19 @@ def required_done_steps(state: dict | None = None) -> list[str]:
     return names[: names.index(bar) + 1]
 
 
-def check_doc(md: str, strategy_dir: str, target: Path) -> str | None:
-    """None if `md`'s governed process is complete-enough to merge, else a FAIL reason."""
+def check_doc(md: str, strategy_dir: str, target: Path, *, retired: bool = False) -> str | None:
+    """None if `md`'s governed process is complete-enough to merge, else a FAIL reason.
+
+    `retired=True` means this `md` is being DELETED in the diff — a strategy retiro. A retiro is valid only
+    as a PAIR: the doc and its `<topic>.process.json` sidecar are both removed. The doc gone while the
+    sidecar survives is an orphan → FAIL."""
     proc = target / f"{md[: -len('.md')]}.process.json"      # emkeel-governance/strategy/<topic>.process.json
+    if retired:
+        if proc.is_file():
+            return (f"{md} is being retired (deleted) but its governed-process state '{proc.as_posix()}' is "
+                    "still present — a process without its doc is an orphan. Delete the .process.json too "
+                    "(retire the pair).")
+        return None                                          # clean retiro: doc + sidecar both gone → OK
     if not proc.is_file():
         return (f"{md} changed but its governed-process state '{proc.as_posix()}' is missing — drive it "
                 "with `emkeel strategy advance <step> <topic> …` and commit the .process.json.")
@@ -149,12 +163,16 @@ def main() -> int:
         print(f"OK: PR changes no strategy doc under {strategy_dir}/ — strategy-process check N/A.")
         return 0
 
+    deleted = set(deleted_files(base))                       # docs being RETIRED (a delete, not an edit)
     ok = True
     for md in touched:
-        problem = check_doc(md, strategy_dir, target)
+        retired = md in deleted
+        problem = check_doc(md, strategy_dir, target, retired=retired)
         if problem:
             ok = False
             print(f"FAIL: {problem}", file=sys.stderr)
+        elif retired:
+            print(f"OK: {md} — strategy retired (doc + process state both removed).")
         else:
             print(f"OK: {md} — governed process reached 'checked' with researched provenance.")
     return 0 if ok else 1

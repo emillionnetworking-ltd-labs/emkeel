@@ -60,6 +60,10 @@ work is done.
 **Refining an existing strategy?** A new refinement (a new ticket on the same `<topic>`) starts the process
 CLEAN — re-run from `scaffolded`; the engine resets and a prior refinement's `approved` NEVER carries over.
 
+**Retiring a strategy?** A path that didn't work can be withdrawn: in a `strategy/<KEY>-slug` lane (with a
+ticket), DELETE `<topic>.md` AND its `<topic>.process.json` together — as a pair. The gate accepts a clean
+retiro; deleting the doc while leaving the sidecar (or vice versa) is an orphan → FAIL.
+
 **Commit `emkeel-governance/strategy/<topic>.process.json` alongside the doc** — it is the proof the steps
 ran, and CI reads it. `emkeel strategy status <topic>` shows ✓/· per step. Never skip the human gate
 (presenting + the merge are the operator's). Never cite a source you didn't open.

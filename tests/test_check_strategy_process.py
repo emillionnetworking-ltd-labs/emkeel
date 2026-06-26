@@ -43,8 +43,9 @@ def _drive_to_validated(tmp_path, topic="auth", *, reality=None, **kw):
     return p
 
 
-def _run(tmp_path, monkeypatch, changed):
+def _run(tmp_path, monkeypatch, changed, deleted=()):
     monkeypatch.setattr(g, "changed_files", lambda base, **k: list(changed))
+    monkeypatch.setattr(g, "deleted_files", lambda base, **k: list(deleted))
     monkeypatch.setenv("EMKEEL_BASE_REF", "main")
     monkeypatch.setenv("EMKEEL_REPO_DIR", str(tmp_path))
     monkeypatch.delenv("EMKEEL_STRATEGY_DIR", raising=False)
@@ -187,6 +188,43 @@ def test_back_compat_legacy_process_without_validated_passes_at_checked(tmp_path
 def test_required_done_steps_reality_bar_when_gated():
     gated = {"steps_schema": g.strategy_process().names()}
     assert g.required_done_steps(gated)[-1] == "validated"
+
+
+# ── KEEL-115: retiring a strategy (doc + sidecar deleted as a pair) ──
+
+def test_clean_retiro_passes(tmp_path, monkeypatch, capsys):
+    # the doc AND its sidecar are deleted (absent on disk) → a valid retiro → OK, not FAIL.
+    _strategy_dir(tmp_path)                                   # dir exists; the files do not (deleted)
+    md = f"{SDIR}/satellites.md"
+    assert _run(tmp_path, monkeypatch,
+                changed=[md], deleted=[md, f"{SDIR}/satellites.process.json"]) == 0
+    assert "retired" in capsys.readouterr().out.lower()
+
+
+def test_orphan_doc_deleted_but_sidecar_present_fails(tmp_path, monkeypatch, capsys):
+    # the doc is deleted but its process sidecar survives → orphan (a process with no doc) → FAIL.
+    _drive_to_validated(tmp_path, "satellites")              # writes satellites.process.json on disk
+    md = f"{SDIR}/satellites.md"
+    assert _run(tmp_path, monkeypatch, changed=[md], deleted=[md]) == 1   # sidecar NOT in deleted
+    assert "orphan" in capsys.readouterr().err.lower()
+
+
+def test_two_strategies_retired_together_pass(tmp_path, monkeypatch):
+    # the real case: retire two strategies in one atomic PR, each as a doc+sidecar pair.
+    _strategy_dir(tmp_path)
+    a, b = f"{SDIR}/satellites.md", f"{SDIR}/satellite-builders.md"
+    deleted = [a, b, f"{SDIR}/satellites.process.json", f"{SDIR}/satellite-builders.process.json"]
+    assert _run(tmp_path, monkeypatch, changed=[a, b], deleted=deleted) == 0
+
+
+def test_edit_path_unchanged_alongside_a_retiro(tmp_path, monkeypatch):
+    # a retiro (OK) + an EDITED doc whose sidecar is missing (FAIL) → build fails; ADD/EDIT stays strict.
+    _strategy_dir(tmp_path)
+    retired = f"{SDIR}/satellites.md"
+    _md(tmp_path, "cache")                                   # cache.md edited, no process.json committed
+    assert _run(tmp_path, monkeypatch,
+                changed=[retired, f"{SDIR}/cache.md"],
+                deleted=[retired, f"{SDIR}/satellites.process.json"]) == 1
 
 
 # ── KEEL-104: a committed 'approved' is never accepted (no self-certified human approval) ──
