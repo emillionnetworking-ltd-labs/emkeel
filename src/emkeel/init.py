@@ -329,7 +329,7 @@ jobs:
           EMKEEL_BRANCH: ${{{{ github.head_ref }}}}
           EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
         run: python -m emkeel.gates.check_strategy_change
-      - name: "Gate - strategy process (non-skippable steps: <topic>.process.json >= checked + provenance)"
+      - name: "Gate - strategy process (non-skippable steps: <topic>.process.json >= validated + provenance)"
         if: github.event_name == 'pull_request'
         env:
           EMKEEL_BASE_REF: ${{{{ github.base_ref }}}}
@@ -461,7 +461,8 @@ def _strategy_skill() -> str:
     # NOT skippable prose: this skill DRIVES the governed-process engine (emkeel.process). After each step's
     # real work you record it with `emkeel strategy advance <step> <topic> --set <evidence>`; the engine
     # REFUSES to advance out of order or without the evidence, and a CI gate (check_strategy_process)
-    # fails any PR whose committed <topic>.process.json hasn't reached `checked` with real research provenance.
+    # fails any PR whose committed <topic>.process.json hasn't reached `validated` (reality evidence) with
+    # real research provenance — a strategy can pass every process step and still be wrong.
     return """---
 name: strategy
 description: >
@@ -480,11 +481,13 @@ from memory. Never invent an option or a source.**
 This skill is a state machine, not advisory prose. After each step's real work, record it with
 `emkeel strategy advance <step> <topic> --set <evidence>` — the engine REFUSES an out-of-order or
 evidence-less advance (exit 1), and CI (`check_strategy_process`) fails the PR unless the committed
-`<topic>.process.json` reached `checked` with real research provenance. `emkeel strategy status <topic>`
-shows where you are. Run each `advance` ONLY after that step's work is done.
+`<topic>.process.json` reached `validated` (the strategy was tried on a real case) with real research
+provenance. `emkeel strategy status <topic>` shows where you are. Run each `advance` ONLY after that step's
+work is done.
 
-1. **Scaffold** — `emkeel strategy new <topic>` creates the structured doc, then:
-   `emkeel strategy advance scaffolded <topic> --set=topic=<topic>`
+1. **Scaffold** — `emkeel strategy new <topic>` creates the structured doc; declare up front the
+   **kill-criteria** (what would prove this strategy WRONG — the conditions under which to abandon it):
+   `emkeel strategy advance scaffolded <topic> --set=topic=<topic> --set='kill_criteria=[<cond1>,<cond2>,…]'`
 2. **Research** (ground in reality; fan out with subagents):
    - *Repo:* Read/Grep the actual code & config for `<topic>` — what exists, conventions, constraints. Cite `file:line`.
    - *Market:* WebSearch/fetch real options & trade-offs. Cite URLs.
@@ -499,11 +502,18 @@ shows where you are. Run each `advance` ONLY after that step's work is done.
    `emkeel strategy advance critiqued <topic> --set=critique="<what the adversarial pass found / fixed>"`
 5. **Check** — run `emkeel strategy check <topic>` and fix until it passes (green = sourced + complete). Then:
    `emkeel strategy advance checked <topic> --set=check_passed=true`
-6. **Human gate — present** — present the options + your recommendation to the operator. **Do NOT decide
-   for them.** Record that you showed it (this does NOT approve anything) — this is the LAST step you
-   commit in the lane PR:
+6. **Validate against reality** — apply the recommendation to ONE real case (cheap is fine: try it once and
+   look at the result). Record the case, how you tested it, the **outcome** (`pass` | `fail` | `mixed`), and a
+   **resolvable proof** (a repo `file:line`, a URL, or an external citation). The engine and CI REFUSE
+   `validated` without it — reality is non-skippable, and a `fail`/`mixed` is an HONEST record, never hidden:
+   `emkeel strategy advance validated <topic> --set=case="<the real case>" --set=method="<how you tested>" --set=outcome=<pass|fail|mixed> --set=evidence_ref=<file:line|URL>`
+7. **Human gate — present** — present the options + your recommendation to the operator. **Do NOT decide
+   for them.** Record that you showed it (this does NOT approve anything) — the LAST step you commit in the
+   lane PR. If the reality outcome was `fail`/`mixed`, proceeding requires a recorded `proceed_justification`
+   — approving despite a failed reality test must be a deliberate, on-record act:
    `emkeel strategy advance presented <topic> --set=presented_to=<operator>`
-7. **Approval is the MERGE — never stamp it yourself.** The operator approves by **approving + merging the
+   (add `--set=proceed_justification="<why proceed despite the reality result>"` when the outcome was not `pass`)
+8. **Approval is the MERGE — never stamp it yourself.** The operator approves by **approving + merging the
    PR** (branch protection requires a human approving review). Do NOT run `emkeel strategy advance approved`
    in the lane PR — a self-written `approved_by` certifies nothing, and the `check_strategy_process` gate
    FAILS a committed `approved` (the merge hasn't happened yet). The committed `<topic>.process.json` stops

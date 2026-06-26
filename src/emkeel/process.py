@@ -80,7 +80,10 @@ class ProcessSchema:
 # ---------- Pure state model (no I/O) ----------
 
 def new_state(schema: ProcessSchema) -> dict:
-    return {"process": schema.name, "state": None, "steps": {}}
+    # `steps_schema` records the process shape at creation time. It is the back-compat discriminator: a
+    # state created under an older schema lacks steps a later schema added, so a gate can hold each state to
+    # the bar of the schema that actually created it (never retroactively demanding a step that didn't exist).
+    return {"process": schema.name, "state": None, "steps": {}, "steps_schema": list(schema.names())}
 
 
 def step_done(state: dict, name: str) -> bool:
