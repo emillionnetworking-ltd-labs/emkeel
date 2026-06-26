@@ -23,6 +23,12 @@ STRATEGY_DIR = "emkeel-governance/strategy"
 REQUIRED_SECTIONS = ("Goal", "Context", "Options", "Recommendation")
 _PLACEHOLDERS = {"", "-", "—", "tbd", "todo", "n/a", "<source>"}
 
+IMPACT_LEVELS = ("low", "medium", "high")
+# `Impact: low` lets a trivial strategy pass `critiqued` with a single lens; absent or anything else → high
+# (the full ≥3-lens panel). Non-evasible: you must consciously declare `low` to get the cheap path.
+_RE_IMPACT = re.compile(r"(?im)^\s*Impact:\s*(low|medium|high)\b")
+FULL_PANEL_LENSES = 3       # non-trivial strategies need ≥ this many distinct adversarial lenses
+
 # A repo source: a CLEAN path (no spaces/prose) with a `/` separator and a `.ext`, optionally followed by
 # `:NN` or `:NN-MM` (line / range). With a line → resolve file + line/range; without a line → existence only.
 # The `/` requirement (checked in classify_source) keeps bare filenames and prose citations off this path.
@@ -37,11 +43,19 @@ def slug(topic: str) -> str:
     return s or "strategy"
 
 
+def doc_impact(text: str) -> str:
+    """The declared `Impact:` (low|medium|high) of a strategy doc — defaults to 'high' when absent or
+    unrecognized, so omitting it never dodges the full critique panel; only an explicit `low` lowers the bar."""
+    m = _RE_IMPACT.search(text or "")
+    return m.group(1).lower() if m else "high"
+
+
 def skeleton(topic: str) -> str:
     return f"""# Strategy: {topic}
 
 Status: DRAFT
 Strategy: {slug(topic)}   <!-- feature specs reference this with a `Strategy: {slug(topic)}` line -->
+Impact: medium   <!-- low | medium | high — `low` lets a trivial strategy pass critiqued with 1 lens; absent = high (full ≥3-lens panel) -->
 
 ## Goal
 <one line: what this strategy decides for "{topic}">
@@ -298,6 +312,26 @@ def _check_passed(fields: dict) -> tuple[bool, str]:
     return False, "requires `check_passed=true` (run `emkeel strategy check` and record its pass)"
 
 
+def critique_lenses(fields: dict) -> list[str]:
+    """The distinct adversarial lenses recorded at `critiqued`: each `lens_<angle>=<finding>` field with a
+    non-empty finding. One field per lens (not a list) so a finding may contain commas/colons safely."""
+    return [k for k in fields if k.startswith("lens_") and str(fields.get(k) or "").strip()]
+
+
+def _critique_panel(fields: dict) -> tuple[bool, str]:
+    """`critiqued` BASELINE (engine): a real adversarial pass, not a one-liner — ≥1 named lens
+    (`lens_<angle>=<finding>`) AND a `completeness` critic (what dimension is missing, or 'none'). The CI gate
+    raises the floor to ≥3 lenses for non-trivial strategies (by the doc's `Impact:`); this baseline kills the
+    silent one-line critique at the engine, and makes a lens-less `critiqued` reachable ONLY under the old
+    schema (so the gate can grandfather legacy without a version stamp)."""
+    if not critique_lenses(fields):
+        return False, ("requires an adversarial panel — at least one `lens_<angle>=<finding>` "
+                       "(e.g. `lens_legal=...`), not a single prose line")
+    if not str(fields.get("completeness") or "").strip():
+        return False, "requires a `completeness` critic — what dimension is missing (or 'none')"
+    return True, ""
+
+
 # The reality outcome is a CLOSED enum: the human records whether the strategy, applied to a real case,
 # passed — `mixed` and `fail` are valid, HONEST records, not gate failures. The gate checks the value is one
 # of these, never that it is `pass` (judging "good" is the human's job at approval — the KEEL-104 pattern).
@@ -334,7 +368,7 @@ def strategy_process() -> "ProcessSchema":
         Step("scaffolded", requires=("topic", "kill_criteria")),  # + the conditions to ABANDON it, up front
         Step("researched", validate=_researched_provenance),
         Step("proposed", requires=("options",)),          # ≥2 real options recorded
-        Step("critiqued", requires=("critique",)),        # adversarial pass recorded
+        Step("critiqued", validate=_critique_panel),      # multi-lens adversarial panel + completeness critic
         Step("checked", requires=("check_passed",), validate=_check_passed),
         Step("validated", requires=("case", "method", "outcome", "evidence_ref"),
              validate=_reality_validated),                # REALITY bar: tried on a real case, outcome on record

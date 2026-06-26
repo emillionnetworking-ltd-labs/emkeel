@@ -12,6 +12,8 @@ SCHEMA = strategy_process()
 KC = ["the pilot rejects it", "worse than the baseline"]                 # kill-criteria, declared up front
 REALITY = {"case": "ECO-71", "method": "applied to one real case",       # the `validated` reality evidence
            "outcome": "pass", "evidence_ref": "https://example.com/pilot"}
+CRIT = {"lens_discovery": "no sitemap; invisible to search", "lens_legal": "no cookie banner; GDPR risk",
+        "lens_calibration": "thin vs the real ECO-71 render", "completeness": "no a11y lens — add it"}  # panel
 
 
 def _walk_to(state, *steps_with_fields):
@@ -72,7 +74,7 @@ def test_checked_requires_recorded_pass():
              ("scaffolded", {"topic": "auth", "kill_criteria": KC}),
              ("researched", {"internal_only": True}),
              ("proposed", {"options": ["jwt", "sessions"]}),
-             ("critiqued", {"critique": "adversarial pass done"}))
+             ("critiqued", CRIT))
     with pytest.raises(PrereqError, match="check_passed"):
         advance(SCHEMA, st, "checked", {"check_passed": False}, timestamp=TS)
     advance(SCHEMA, st, "checked", {"check_passed": True}, timestamp=TS)
@@ -85,7 +87,7 @@ def test_approved_requires_human_gate_field():
              ("scaffolded", {"topic": "auth", "kill_criteria": KC}),
              ("researched", {"internal_only": True}),
              ("proposed", {"options": ["jwt", "sessions"]}),
-             ("critiqued", {"critique": "x"}),
+             ("critiqued", CRIT),
              ("checked", {"check_passed": True}),
              ("validated", REALITY),
              ("presented", {"presented_to": "operator"}))
@@ -148,7 +150,7 @@ def test_reentering_first_step_resets_the_process():
              ("scaffolded", {"topic": "auth", "kill_criteria": KC}),
              ("researched", {"internal_only": True}),
              ("proposed", {"options": ["a", "b"]}),
-             ("critiqued", {"critique": "x"}),
+             ("critiqued", CRIT),
              ("checked", {"check_passed": True}),
              ("validated", REALITY),
              ("presented", {"presented_to": "op"}),
@@ -176,7 +178,7 @@ def _walk_to_checked(st):
              ("scaffolded", {"topic": "auth", "kill_criteria": KC}),
              ("researched", {"internal_only": True}),
              ("proposed", {"options": ["a", "b"]}),
-             ("critiqued", {"critique": "x"}),
+             ("critiqued", CRIT),
              ("checked", {"check_passed": True}))
 
 
@@ -214,3 +216,30 @@ def test_validated_accepts_a_recorded_fail_outcome():
 def test_new_state_records_the_schema_shape():
     st = new_state(SCHEMA)
     assert st["steps_schema"] == SCHEMA.names() and "validated" in st["steps_schema"]
+
+
+# ── KEEL-118: the critiqued multi-lens panel (engine baseline) ──
+
+def _walk_to_proposed(st):
+    _walk_to(st,
+             ("scaffolded", {"topic": "auth", "kill_criteria": KC}),
+             ("researched", {"internal_only": True}),
+             ("proposed", {"options": ["a", "b"]}))
+
+
+def test_critiqued_refuses_a_one_liner():
+    st = new_state(SCHEMA); _walk_to_proposed(st)
+    with pytest.raises(PrereqError, match="panel"):
+        advance(SCHEMA, st, "critiqued", {"critique": "one prose line"}, timestamp=TS)   # no lenses
+
+
+def test_critiqued_refuses_without_completeness_critic():
+    st = new_state(SCHEMA); _walk_to_proposed(st)
+    with pytest.raises(PrereqError, match="completeness"):
+        advance(SCHEMA, st, "critiqued", {"lens_seo": "discovery gap"}, timestamp=TS)
+
+
+def test_critiqued_accepts_one_lens_plus_completeness():
+    st = new_state(SCHEMA); _walk_to_proposed(st)
+    advance(SCHEMA, st, "critiqued", {"lens_seo": "x", "completeness": "none"}, timestamp=TS)
+    assert step_done(st, "critiqued")

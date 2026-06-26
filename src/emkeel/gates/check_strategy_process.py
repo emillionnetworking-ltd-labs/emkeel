@@ -22,8 +22,9 @@ from pathlib import Path
 
 from emkeel.gates.check_maint_scope import changed_files, deleted_files
 from emkeel.process import StateParseError, read_state, step_done
-from emkeel.strategy import (STRATEGY_DIR, _reality_validated, _repo_problem, _researched_provenance,
-                            classify_source, strategy_process)
+from emkeel.strategy import (FULL_PANEL_LENSES, STRATEGY_DIR, _reality_validated, _repo_problem,
+                            _researched_provenance, classify_source, critique_lenses, doc_impact,
+                            strategy_process)
 
 
 def strategy_docs_changed(files: list[str], strategy_dir: str) -> list[str]:
@@ -87,6 +88,15 @@ def check_doc(md: str, strategy_dir: str, target: Path, *, retired: bool = False
     if not ok:
         return f"{md} — the 'researched' step lacks provenance: {why} (no silent skip of the research)."
 
+    # CRITIQUE PANEL (KEEL-118): a non-trivial strategy's `critiqued` step must carry a multi-lens
+    # adversarial pass (≥FULL_PANEL_LENSES distinct lenses) + a completeness critic — depth is part of the
+    # governed process, not optional. The bar drops to 1 lens for `Impact: low`. A legacy `critiqued` with no
+    # lenses (the old one-line `critique`) is grandfathered — the engine makes a lens-less critique
+    # unreachable under the new schema, so "no lenses" can only mean a state recorded before this change.
+    crit = _critique_panel_problem(state, md, target)
+    if crit:
+        return f"{md} — {crit}"
+
     # REALITY GATE (KEEL-114): a reality-gated strategy must carry sound reality evidence at `validated`,
     # and approving DESPITE a failed reality test must be a recorded, conscious act. Deterministic — it
     # checks presence/structure/resolution, NEVER whether the outcome itself is 'good' (that's the human's
@@ -110,6 +120,25 @@ def check_doc(md: str, strategy_dir: str, target: Path, *, retired: bool = False
     incoherent = _coherence_problem(state)
     if incoherent:
         return f"{md} — incoherent process state: {incoherent}"
+    return None
+
+
+def _critique_panel_problem(state: dict, md: str, target: Path) -> str | None:
+    """Enforce the multi-lens critique depth, thresholded by the doc's `Impact:`. None if OK or legacy."""
+    crit = state.get("steps", {}).get("critiqued", {})
+    lenses = critique_lenses(crit)
+    if not lenses:
+        return None                                          # legacy (old one-line critique) → grandfathered
+    md_path = target / md
+    text = md_path.read_text(encoding="utf-8", errors="replace") if md_path.is_file() else ""
+    impact = doc_impact(text)
+    need = 1 if impact == "low" else FULL_PANEL_LENSES
+    if len(lenses) < need:
+        return (f"the 'critiqued' adversarial panel has {len(lenses)} lens(es) but Impact={impact} requires "
+                f"≥{need} distinct lenses (different angles). Add lenses (e.g. `lens_legal=…`), or declare "
+                f"`Impact: low` in the doc if this strategy is genuinely trivial.")
+    if not str(crit.get("completeness") or "").strip():
+        return "the 'critiqued' step lacks a `completeness` critic (`completeness=<what dimension is missing>`)."
     return None
 
 

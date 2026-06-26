@@ -175,3 +175,11 @@ def test_check_fails_when_repo_source_unresolvable(tmp_path):
 
 def test_check_no_docs_ok(tmp_path):
     assert _do_check("", tmp_path) == 0             # nothing to check
+
+
+def test_doc_impact_defaults_high_and_reads_declared():
+    from emkeel.strategy import doc_impact
+    assert doc_impact("# Strategy: x\n") == "high"          # absent → high (non-evasible)
+    assert doc_impact("# Strategy: x\nImpact: low\n") == "low"
+    assert doc_impact("Impact: MEDIUM\n") == "medium"
+    assert doc_impact("Impact: bogus\n") == "high"          # unrecognized → high
