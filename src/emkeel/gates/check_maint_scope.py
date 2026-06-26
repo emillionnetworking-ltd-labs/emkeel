@@ -31,6 +31,13 @@ def changed_files(base: str, run=_run) -> list[str]:
     return [f for f in r.stdout.splitlines() if f.strip()]
 
 
+def deleted_files(base: str, run=_run) -> list[str]:
+    """Paths DELETED in the PR diff (`--diff-filter=D`). `changed_files` (--name-only) can't tell a delete
+    from an edit; a gate that treats removal specially (e.g. retiring a strategy doc) needs to see deletes."""
+    r = run(["git", "diff", "--diff-filter=D", "--name-only", f"origin/{base}...HEAD"])
+    return [f for f in r.stdout.splitlines() if f.strip()]
+
+
 def main() -> int:
     branch = os.environ.get("EMKEEL_BRANCH", "")
     if not is_maint_lane(branch):
