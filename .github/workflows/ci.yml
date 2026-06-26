@@ -32,6 +32,18 @@ jobs:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: python -m emkeel.gates.check_ticket_link
 
+      - name: "Gate — ticket precedes work (ticket-first)"
+        if: github.event_name == 'pull_request'
+        env:
+          EMKEEL_BRANCH: ${{ github.head_ref }}
+          EMKEEL_PR_TITLE: ${{ github.event.pull_request.title }}
+          EMKEEL_BASE_REF: ${{ github.base_ref }}
+          # The gate compares Jira's `created` to the branch's first commit (ticket-first). Secrets absent → inconclusive warning.
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: python -m emkeel.gates.check_ticket_precedes_work
+
       # Gate: la via de mantenimiento emkeel-maint/ solo puede tocar ficheros de Emkeel.
       - name: "Gate — maintenance scope"
         if: github.event_name == 'pull_request'

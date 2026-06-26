@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 import sys
 
-_USAGE = "usage: emkeel <setup|init|review|eject|doctor|connect|sync|update|set|strategy|jira|guard|version> [args]   (try: emkeel setup)"
+_USAGE = "usage: emkeel <setup|init|start|review|eject|doctor|connect|sync|update|set|strategy|jira|guard|version> [args]   (try: emkeel setup)"
 
 # Commands that already speak to wiring/cred state (don't double-nudge) or run hot (guard = every tool call).
 _NO_NUDGE = {"doctor", "update", "connect", "guard", "version", "--version", "-V", "-h", "--help"}
@@ -51,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "setup":
         from emkeel.wizard import main as wizard_main
         return wizard_main(rest)
+    if cmd == "start":
+        from emkeel.start import main as start_main
+        return start_main(rest)
     if cmd == "doctor":
         from emkeel.doctor import main as doctor_main
         return doctor_main(rest)

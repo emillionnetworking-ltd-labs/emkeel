@@ -129,6 +129,17 @@ def issue_status_name(key: str, *, caller=None) -> tuple[int, str | None]:
     return status, name
 
 
+def issue_created(key: str, *, caller=None) -> tuple[int, str | None]:
+    """(http_status, the issue's `created` ISO8601 timestamp) — lets a gate verify a ticket PREDATES the
+    work (the `created` field is set by Jira's server, a fact the agent can't backdate)."""
+    caller = caller or _default_caller()
+    status, data = caller("GET", f"/rest/api/3/issue/{key}?fields=created")
+    created = None
+    if status == 200 and isinstance(data, dict):
+        created = data.get("fields", {}).get("created")
+    return status, created
+
+
 def create_issue(project: str, summary: str, issuetype: str = "Task",
                  description: str = "", *, caller=None) -> tuple[bool, str]:
     """POST a new issue. Returns (True, new_key) on success, (False, message) on failure.
@@ -349,6 +360,30 @@ def _place_after_create(key: str, project: str, choice: str | None) -> None:
               file=sys.stderr)                     # …but never silent either.
 
 
+def create_and_place(project: str, summary: str, issuetype: str = "Task", description: str = "",
+                     sprint: str = "auto") -> tuple[int, str | None]:
+    """The shared create core of `emkeel jira create` AND `emkeel start` — both create the SAME way (same
+    isolation/creds guards, same no-orphan sprint placement). Returns (exit_code, new_key | None). HARD,
+    non-silent failures: on a block or missing creds it errors RED and returns (1, None) — the caller must
+    NOT proceed to open a PR with no ticket."""
+    blocked = _isolation_block_project(project)
+    if blocked:
+        print(f"::error::{blocked}\nSTOP: do not open a PR without a ticket — fix the project/window first.",
+              file=sys.stderr)
+        return 1, None
+    if not secrets_present():
+        print("::error::Cannot create a Jira issue — no Jira creds in the environment or this repo's "
+              "scoped .env (JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN). Run `emkeel connect`.\n"
+              "STOP: do not open a PR without a ticket.", file=sys.stderr)
+        return 1, None
+    ok, res = create_issue(project, summary, issuetype, description)
+    if not ok:
+        print(f"::error::{res}", file=sys.stderr)
+        return 1, None
+    _place_after_create(res, project, sprint)    # no-orphan: always recommend + place when sprints used
+    return 0, res
+
+
 def _main_create(rest: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="emkeel jira create", description="Create a Jira issue.")
     ap.add_argument("--project", required=True, help="project key, e.g. ECO")
@@ -362,13 +397,6 @@ def _main_create(rest: list[str]) -> int:
     # argparse's opaque "unrecognized arguments" — it is rejected below, never honored.
     ap.add_argument("--status", default=None, help=argparse.SUPPRESS)
     ns = ap.parse_args(rest)
-    # HARD, non-silent failures (like the guard): on a block or missing creds, error RED and STOP — the
-    # agent must NOT proceed to open a PR with no ticket.
-    blocked = _isolation_block_project(ns.project)
-    if blocked:
-        print(f"::error::{blocked}\nSTOP: do not open a PR without a ticket — fix the project/window first.",
-              file=sys.stderr)
-        return 1
     # A ticket is BORN in the project's INITIAL state — creation never sets status. `Done` (and any other
     # status) is EARNED by the work + the merge, not auto-written at create — the spirit of KEEL-104 applied
     # to completion (ECO-69/70 were created already Done, skipping work→merge→Done). Reject BEFORE creating
@@ -380,18 +408,10 @@ def _main_create(rest: list[str]) -> int:
               "`emkeel jira transition` once the work merges.\nSTOP: re-run create without --status.",
               file=sys.stderr)
         return 1
-    if not secrets_present():
-        print("::error::Cannot create a Jira issue — no Jira creds in the environment or this repo's "
-              "scoped .env (JIRA_BASE_URL / JIRA_EMAIL / JIRA_TOKEN). Run `emkeel connect`.\n"
-              "STOP: do not open a PR without a ticket.", file=sys.stderr)
-        return 1
-    ok, res = create_issue(ns.project, ns.summary, ns.issuetype, ns.description)
-    if not ok:
-        print(f"::error::{res}", file=sys.stderr)
-        return 1
-    print(res)                                   # the new key (stdout, scriptable) — in the initial state
-    _place_after_create(res, ns.project, ns.sprint)   # no-orphan: always recommend + place when sprints used
-    return 0
+    code, key = create_and_place(ns.project, ns.summary, ns.issuetype, ns.description, ns.sprint)
+    if key:
+        print(key)                               # the new key (stdout, scriptable) — in the initial state
+    return code
 
 
 def _main_transition(argv: list[str]) -> int:
