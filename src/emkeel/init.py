@@ -524,9 +524,12 @@ work is done.
    `emkeel strategy advance researched <topic> --set=internal_only=true`
 3. **Propose** — fill the Options table with **≥2 real options**, each with its **Source**, pros, cons, risk:
    `emkeel strategy advance proposed <topic> --set='options=[<opt1>,<opt2>,…]'`
-4. **Critique** (adversarial; subagents): for each option a skeptic **re-opens the cited source** — does it
-   really say that? — and attacks weaknesses + drift risks. Drop/fix anything unverified, then:
-   `emkeel strategy advance critiqued <topic> --set=critique="<what the adversarial pass found / fixed>"`
+4. **Critique** — a multi-lens adversarial PANEL (fan out subagents, one per angle): re-open each option's
+   cited source (does it really say that?) AND attack from DISTINCT lenses — recommended: discovery/SEO,
+   professional completeness, calibration to the real case, legal/compliance, plus any topic-specific angle.
+   Then a **completeness critic**: what dimension is missing? Record ONE finding per lens + the completeness
+   answer (the engine refuses a one-liner; CI requires ≥3 distinct lenses unless the doc declares `Impact: low`):
+   `emkeel strategy advance critiqued <topic> --set lens_discovery="…" --set lens_completeness="…" --set lens_calibration="…" --set lens_legal="…" --set completeness="<what's missing, or 'none'>"`
 5. **Check** — run `emkeel strategy check <topic>` and fix until it passes (green = sourced + complete). Then:
    `emkeel strategy advance checked <topic> --set=check_passed=true`
 6. **Validate against reality** — apply the recommendation to ONE real case (cheap is fine: try it once and

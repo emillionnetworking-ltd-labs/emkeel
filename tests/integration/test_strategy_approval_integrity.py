@@ -14,6 +14,8 @@ TS = "2026-06-23T00:00:00Z"
 KC = ["the pilot rejects it", "worse than the baseline"]
 REALITY = {"case": "ECO-71", "method": "applied to one real case",
            "outcome": "pass", "evidence_ref": "https://example.com/pilot"}
+CRIT = {"lens_discovery": "no sitemap; invisible to search", "lens_legal": "no cookie banner; GDPR risk",
+        "lens_calibration": "thin vs the real render", "completeness": "no a11y lens — add it"}
 
 
 def _drive(p, *steps):
@@ -41,7 +43,7 @@ def test_forged_approved_fails_the_gate(tmp_path, monkeypatch, capsys):
            ("scaffolded", {"topic": "satellites", "kill_criteria": KC}),
            ("researched", {"sources": ["https://nist.gov/x"]}),
            ("proposed", {"options": ["a", "b"]}),
-           ("critiqued", {"critique": "x"}),
+           ("critiqued", CRIT),
            ("checked", {"check_passed": True}),
            ("validated", REALITY),
            ("presented", {"presented_to": "operador"}),
@@ -58,7 +60,7 @@ def test_refinement_resets_a_prior_approval_then_passes_at_presented(tmp_path, m
            ("scaffolded", {"topic": "satellites", "kill_criteria": KC}),
            ("researched", {"internal_only": True}),
            ("proposed", {"options": ["a", "b"]}),
-           ("critiqued", {"critique": "x"}),
+           ("critiqued", CRIT),
            ("checked", {"check_passed": True}),
            ("validated", REALITY),
            ("presented", {"presented_to": "op"}),
@@ -68,7 +70,7 @@ def test_refinement_resets_a_prior_approval_then_passes_at_presented(tmp_path, m
            ("scaffolded", {"topic": "satellites", "kill_criteria": KC}),
            ("researched", {"sources": ["https://fidoalliance.org/specs/"]}),
            ("proposed", {"options": ["c", "d"]}),
-           ("critiqued", {"critique": "fresh adversarial pass"}),
+           ("critiqued", CRIT),
            ("checked", {"check_passed": True}),
            ("validated", REALITY),
            ("presented", {"presented_to": "op"}))

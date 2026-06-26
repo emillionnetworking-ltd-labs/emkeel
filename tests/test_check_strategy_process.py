@@ -21,9 +21,11 @@ def _md(tmp_path, topic="auth"):
 KC = ["the pilot rejects it", "worse than the baseline"]
 REALITY = {"case": "ECO-71", "method": "applied to one real case",
            "outcome": "pass", "evidence_ref": "https://example.com/pilot"}
+CRIT = {"lens_discovery": "no sitemap; invisible to search", "lens_legal": "no cookie banner; GDPR risk",
+        "lens_calibration": "thin vs the real render", "completeness": "no a11y lens — add it"}
 
 
-def _drive_to_checked(tmp_path, topic="auth", *, sources=None, internal_only=False):
+def _drive_to_checked(tmp_path, topic="auth", *, sources=None, internal_only=False, critique=None):
     """Drive the real engine to `checked`, recording provenance — the legitimate, complete path."""
     schema = strategy_process()
     p = tmp_path / SDIR / f"{topic}.process.json"
@@ -31,7 +33,7 @@ def _drive_to_checked(tmp_path, topic="auth", *, sources=None, internal_only=Fal
     fields = {"internal_only": True} if internal_only else {"sources": sources or ["https://nist.gov/x"]}
     advance_on_disk(schema, p, "researched", fields, timestamp=TS)
     advance_on_disk(schema, p, "proposed", {"options": ["a", "b"]}, timestamp=TS)
-    advance_on_disk(schema, p, "critiqued", {"critique": "adversarial pass done"}, timestamp=TS)
+    advance_on_disk(schema, p, "critiqued", critique or CRIT, timestamp=TS)
     advance_on_disk(schema, p, "checked", {"check_passed": True}, timestamp=TS)
     return p
 
@@ -215,6 +217,45 @@ def test_two_strategies_retired_together_pass(tmp_path, monkeypatch):
     a, b = f"{SDIR}/satellites.md", f"{SDIR}/satellite-builders.md"
     deleted = [a, b, f"{SDIR}/satellites.process.json", f"{SDIR}/satellite-builders.process.json"]
     assert _run(tmp_path, monkeypatch, changed=[a, b], deleted=deleted) == 0
+
+
+# ── KEEL-118: the critique panel depth (thresholded by Impact) ──
+
+_ONE_LENS = {"lens_discovery": "no sitemap; invisible to search", "completeness": "none"}
+
+
+def test_high_impact_needs_three_lenses(tmp_path, monkeypatch, capsys):
+    _md(tmp_path)                                            # no Impact declared → high → needs ≥3
+    _drive_to_validated(tmp_path, critique=_ONE_LENS)        # only 1 lens
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 1
+    assert "lens" in capsys.readouterr().err.lower()
+
+
+def test_three_lenses_passes(tmp_path, monkeypatch):
+    _md(tmp_path); _drive_to_validated(tmp_path)             # CRIT = 3 distinct lenses + completeness
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 0
+
+
+def test_impact_low_allows_one_lens(tmp_path, monkeypatch):
+    (_strategy_dir(tmp_path) / "auth.md").write_text("# Strategy: auth\nImpact: low\n")
+    _drive_to_validated(tmp_path, critique=_ONE_LENS)       # 1 lens is enough when Impact: low
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 0
+
+
+def test_legacy_critique_without_lenses_grandfathered(tmp_path, monkeypatch):
+    # a process recorded under the OLD schema: critiqued done with the one-line `critique`, no lenses.
+    # The engine makes that unreachable now, so it can only be legacy → grandfathered (not retro-broken).
+    _md(tmp_path)
+    p = tmp_path / SDIR / "auth.process.json"
+    state = new_state(strategy_process())
+    state["state"] = "validated"
+    for s in ("scaffolded", "researched", "proposed", "critiqued", "checked", "validated"):
+        state["steps"][s] = {"done": True, "timestamp": TS}
+    state["steps"]["researched"]["sources"] = ["https://nist.gov/x"]
+    state["steps"]["critiqued"]["critique"] = "old one-line critique"     # no lens_ → legacy
+    state["steps"]["validated"].update(REALITY)
+    save_state(p, state)
+    assert _run(tmp_path, monkeypatch, [f"{SDIR}/auth.md"]) == 0
 
 
 def test_edit_path_unchanged_alongside_a_retiro(tmp_path, monkeypatch):

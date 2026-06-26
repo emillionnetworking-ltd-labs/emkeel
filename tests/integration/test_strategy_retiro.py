@@ -17,6 +17,8 @@ TS = "2026-06-26T00:00:00Z"
 KC = ["the pilot rejects it", "worse than the baseline"]
 REALITY = {"case": "ECO-71", "method": "applied to one real case",
            "outcome": "pass", "evidence_ref": "https://example.com/pilot"}
+CRIT = {"lens_discovery": "no sitemap; invisible to search", "lens_legal": "no cookie banner; GDPR risk",
+        "lens_calibration": "thin vs the real render", "completeness": "no a11y lens — add it"}
 
 
 def _git(repo, *args):
@@ -29,7 +31,7 @@ def _drive_validated(repo, topic):
     advance_on_disk(s, p, "scaffolded", {"topic": topic, "kill_criteria": KC}, timestamp=TS)
     advance_on_disk(s, p, "researched", {"internal_only": True}, timestamp=TS)
     advance_on_disk(s, p, "proposed", {"options": ["a", "b"]}, timestamp=TS)
-    advance_on_disk(s, p, "critiqued", {"critique": "x"}, timestamp=TS)
+    advance_on_disk(s, p, "critiqued", CRIT, timestamp=TS)
     advance_on_disk(s, p, "checked", {"check_passed": True}, timestamp=TS)
     advance_on_disk(s, p, "validated", REALITY, timestamp=TS)
     return p
