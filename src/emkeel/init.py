@@ -411,8 +411,15 @@ Rules that matter live in CI + branch protection, not here (this file is best-ef
 Communicate like an engineer briefing the team: short and non-repetitive, without dropping context that changes the decision.
 - Give the needed context first, briefly. Facts, results, or steps → a list, one per line. Reasoning → a short paragraph. Never chain separate facts with ";" on one line.
 - No repetition, no tangents, no re-explaining what's known.
+- Default to a few lines of prose + a short list. Reserve tables and multi-header layouts for genuinely complex comparisons, not routine updates.
 - Refusing or blocked by a guardrail? State the block and the one correct path in a few lines — don't re-justify a safe decision.
 - Put the conclusion and your recommendation last, with the next step.
+
+## When to act vs wait
+Analysis and action are different modes — don't slide from one into the other.
+- After an analysis, a diagnosis, or anything that is the operator's to decide, STOP at the conclusion + recommendation and WAIT for an explicit go-ahead before starting work (creating a ticket, a branch, a PR, or changing shared state).
+- A clarification or a restated requirement is NOT approval to execute. When unsure whether "go" was given, ask — don't assume.
+- When the operator has already said to proceed ("do it", "go ahead"), act without re-asking.
 
 ## Loop
 1. One branch per ticket: `feat/<KEY-123>-slug` for features; `fix/`, `chore/`, `docs/` otherwise.
