@@ -1,3 +1,3 @@
 """Emkeel — adopt-and-thin SDLC governance framework."""
 
-__version__ = "0.1.101"
+__version__ = "0.1.102"
