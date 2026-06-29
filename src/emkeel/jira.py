@@ -140,6 +140,15 @@ def issue_created(key: str, *, caller=None) -> tuple[int, str | None]:
     return status, created
 
 
+def _adf(text: str) -> dict:
+    """Plain text → minimal Atlassian Document Format (one paragraph per line; blank lines preserved). ADF
+    text nodes can't hold newlines, so multi-line text MUST become multiple paragraphs."""
+    content = [{"type": "paragraph", "content": [{"type": "text", "text": ln}]} if ln
+               else {"type": "paragraph"}
+               for ln in text.split("\n")]
+    return {"type": "doc", "version": 1, "content": content or [{"type": "paragraph"}]}
+
+
 def create_issue(project: str, summary: str, issuetype: str = "Task",
                  description: str = "", *, caller=None) -> tuple[bool, str]:
     """POST a new issue. Returns (True, new_key) on success, (False, message) on failure.
@@ -149,9 +158,7 @@ def create_issue(project: str, summary: str, issuetype: str = "Task",
     caller = caller or _default_caller()
     fields = {"project": {"key": project}, "summary": summary, "issuetype": {"name": issuetype}}
     if description:
-        fields["description"] = {"type": "doc", "version": 1,
-                                 "content": [{"type": "paragraph",
-                                              "content": [{"type": "text", "text": description}]}]}
+        fields["description"] = _adf(description)
     status, data = caller("POST", "/rest/api/3/issue", {"fields": fields})
     if status == 201 and isinstance(data, dict) and data.get("key"):
         return True, data["key"]
@@ -361,6 +368,16 @@ def _unmark_pending(key: str, *, caller=None) -> bool:
     return st in (200, 204)
 
 
+def set_description(key: str, text: str, *, caller=None) -> tuple[bool, str]:
+    """Replace an existing issue's description (PUT the ADF). The Jira canonical detail in this ecosystem is
+    the SPEC on disk — this just lets the ticket mirror it, instead of stashing guidance in memory."""
+    caller = caller or _default_caller()
+    st, _ = caller("PUT", f"/rest/api/3/issue/{key}", {"fields": {"description": _adf(text)}})
+    if st in (200, 204):
+        return True, f"{key}: description updated"
+    return False, f"{key}: could not update description (HTTP {st})"
+
+
 def _place_after_create(key: str, project: str, choice: str | None) -> None:
     """No-orphan, operator-decides: when the project uses sprints, ALWAYS surface the recommendation. By
     DEFAULT (no `--sprint`) do NOT auto-add to a sprint — leave the ticket in the backlog labeled pending
@@ -521,12 +538,46 @@ def _main_place(rest: list[str]) -> int:
     return 0 if ok else 1
 
 
+def _main_describe(rest: list[str]) -> int:
+    """`emkeel jira describe <key> (--text "…" | --from <file>)` — set/replace an issue's description, so
+    guidance lives on the ticket (mirroring the spec), not stashed in an agent's memory."""
+    ap = argparse.ArgumentParser(prog="emkeel jira describe",
+                                 description="Set or replace an issue's description.")
+    ap.add_argument("key")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--text", help="the description text")
+    src.add_argument("--from", dest="from_file", help="read the description from a file")
+    ns = ap.parse_args(rest)
+    project = ns.key.split("-")[0]
+    blocked = _isolation_block_project(project)
+    if blocked:
+        print(f"::error::{blocked}", file=sys.stderr)
+        return 1
+    if not secrets_present():
+        print("::error::Cannot edit a description — no Jira creds (run `emkeel connect`).", file=sys.stderr)
+        return 1
+    if ns.from_file:
+        import pathlib
+        try:
+            text = pathlib.Path(ns.from_file).read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"::error::cannot read {ns.from_file}: {e}", file=sys.stderr)
+            return 1
+    else:
+        text = ns.text
+    ok, msg = set_description(ns.key, text)
+    print((msg if ok else f"::warning::{msg}"), file=(sys.stdout if ok else sys.stderr))
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     if argv and argv[0] == "create":
         return _main_create(argv[1:])
     if argv and argv[0] == "place":
         return _main_place(argv[1:])
+    if argv and argv[0] == "describe":
+        return _main_describe(argv[1:])
     return _main_transition(argv)
 
 
